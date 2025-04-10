@@ -100,7 +100,7 @@ class LLMCommanderApp:
                     try:
                         # Prompt appears in the terminal running the *server*
                         response = input(">>> Execute these commands? (yes/no): ").lower().strip()
-                        if response != 'yes':
+                        if response != 'yes' or response == 'y':
                             proceed_with_execution = False
                             print("--- Execution cancelled by user. ---")
                             attempt_data["stderr"] = "Execution cancelled by user."
