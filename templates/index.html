@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title or "Commander" }} - LLM Commander</title>
+    <style>
+        /* --- Base & Navbar Styles (Keep Existing) --- */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 0; background-color: #f8f9fa; color: #212529; }
+        .navbar { background-color: #343a40; padding: 10px 20px; color: white; display: flex; justify-content: space-between; align-items: center; }
+        .navbar .brand { font-size: 1.2em; font-weight: bold; }
+        .navbar .user-info a { color: #dc3545; text-decoration: none; margin-left: 15px; font-weight: bold; }
+        .navbar .user-info a:hover { text-decoration: underline; }
+        .container { max-width: 900px; margin: 30px auto; background: #fff; padding: 0; /* Remove padding from container, add to content */ border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.07); } /* Removed padding */
+
+        /* --- Tab Styles --- */
+        .tab-buttons {
+            border-bottom: 2px solid #dee2e6;
+            margin-bottom: 0;
+            padding: 15px 30px 0 30px; /* Add padding around buttons */
+            display: flex;
+            background-color: #fff; /* Ensure container background */
+            border-radius: 8px 8px 0 0; /* Match container top corners */
+        }
+        .tab-link {
+            background-color: #f8f9fa;
+            border: 2px solid #dee2e6; /* MODIFIED: Added 2px border */
+            border-bottom: none; /* Remove bottom border initially */
+            padding: 12px 25px;
+            cursor: pointer;
+            margin-right: 5px;
+            margin-bottom: -2px; /* Overlap the container border */
+            border-radius: 5px 5px 0 0;
+            font-size: 1.1em;
+            font-weight: 500;
+            color: #495057;
+            transition: background-color 0.2s, color 0.2s;
+            outline: none;
+            position: relative; /* Needed for overlap */
+        }
+        .tab-link:hover {
+            background-color: #e9ecef;
+            color: #212529;
+        }
+        .tab-link.active {
+            background-color: #ffffff;
+            border-color: #dee2e6 #dee2e6 #ffffff; /* Bottom border blends */
+            /* top property removed, margin-bottom handles overlap */
+            color: #007bff;
+            font-weight: bold;
+            z-index: 1; /* Ensure active tab border is on top */
+        }
+        .tab-content {
+             /* Border now comes from the container potentially, or add back if needed */
+             padding: 30px; /* Padding inside content area */
+             background-color: #ffffff; /* Ensure background matches active tab */
+             border-radius: 0 0 8px 8px; /* Match container bottom corners */
+             /* Add top border if container shadow is desired */
+             /* border-top: 2px solid #dee2e6; */
+        }
+        .tab-panel {
+            display: none; /* Hide inactive panels by default */
+        }
+        .tab-panel.active {
+            display: block; /* Show active panel */
+        }
+
+        /* --- Content Styles (Keep Existing, minor adjustments) --- */
+        /* Apply H1 style within tab panels */
+        .tab-panel h1 { color: #343a40; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; margin-top: 0; margin-bottom: 20px; }
+        .tab-panel h2 { color: #495057; margin-top: 25px; }
+        .tab-panel h3 { color: #6c757d; margin-top: 20px; margin-bottom: 10px; font-size: 1.1em; }
+
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #495057; }
+        textarea { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ced4da; border-radius: 4px; min-height: 120px; resize: vertical; box-sizing: border-box; font-size: 1em; }
+        textarea:focus { border-color: #80bdff; outline: 0; box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); }
+        input[type="number"] { width: 70px; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; margin-left: 10px; }
+        button[type="submit"] { background-color: #28a745; color: white; padding: 12px 25px; border: none; border-radius: 4px; cursor: pointer; font-size: 1.1em; font-weight: bold; transition: background-color 0.2s; }
+        button[type="submit"]:hover { background-color: #218838; }
+        button[type="submit"]:disabled { background-color: #6c757d; cursor: not-allowed; }
+
+        #status { margin-top: 20px; font-weight: bold; padding: 12px; border-radius: 4px; display: none; }
+        .status-loading { background-color: #ffc107; color: #343a40; border: 1px solid #ffeeba; display: block; }
+        .status-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; display: block; }
+        .status-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; display: block; }
+        #results { margin-top: 25px; background-color: #f8f9fa; padding: 20px; border-radius: 4px; border: 1px solid #dee2e6; max-height: 600px; overflow-y: auto; font-size: 0.9em; }
+        #results h2 { border-bottom: 1px solid #ced4da; padding-bottom: 5px; font-size: 1.3em; margin-top: 0; }
+        .attempt { border: 1px solid #e9ecef; background-color: #ffffff; border-radius: 5px; margin-bottom: 20px; padding: 15px; }
+        .attempt:last-child { margin-bottom: 0; }
+        .attempt p { margin-top: 0; margin-bottom: 8px; }
+        pre { background-color: #e9ecef; color: #212529; padding: 10px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 0.95em; border: 1px solid #ced4da; }
+        pre.stderr { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        .warning strong { font-weight: bold; }
+
+        /* --- Dummy Financial Dashboard Styles --- */
+        .financial-widgets { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 20px; }
+        .widget { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 20px; flex: 1 1 250px; /* Grow, shrink, basis */ text-align: center; }
+        .widget h3 { margin-top: 0; color: #495057; }
+        .widget .value { font-size: 2em; font-weight: bold; margin: 10px 0; }
+        .widget .value.positive { color: #28a745; }
+        .widget .value.negative { color: #dc3545; }
+        .widget .change { font-size: 0.9em; color: #6c757d; }
+        .placeholder-chart { background-color: #e9ecef; border: 1px dashed #ced4da; height: 200px; display: flex; align-items: center; justify-content: center; color: #6c757d; margin-top: 30px; border-radius: 5px; }
+
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="brand">LLM Commander</div>
+        <div class="user-info">
+            Logged in as: <strong>{{ username }}</strong>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+
+        <!-- Tab Buttons -->
+        <div class="tab-buttons">
+            <button class="tab-link active" data-target="tab-llm-executor">LLM Task Executor</button>
+            <button class="tab-link" data-target="tab-finance-dashboard">Financial Dashboard</button>
+        </div>
+
+        <!-- Tab Content Area is implicitly the rest of the container -->
+        <div class="tab-content">
+
+            <!-- LLM Task Executor Tab Panel -->
+            <div id="tab-llm-executor" class="tab-panel active">
+                <h1>LLM Task Executor</h1>
+
+                <div class="warning">
+                    <strong>Security Warning:</strong> Commands generated by the LLM based on your prompt will be executed directly on the server... (content truncated for brevity)
+                </div>
+
+                <form id="promptForm" novalidate>
+                    <div class="form-group">
+                        <label for="promptInput">Describe the task:</label>
+                        <textarea id="promptInput" name="prompt" required placeholder="e.g., 'Install htop using apt'"></textarea>
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: center;">
+                        <label for="maxRetriesInput" style="margin-bottom: 0;">Max Retries (if commands fail):</label>
+                        <input type="number" id="maxRetriesInput" name="max_retries" value="3" min="0" max="10">
+                    </div>
+                    <button type="submit" id="submitBtn">Execute Task</button>
+                </form>
+
+                <div id="status"></div>
+                <div id="results">Results will appear here after execution...</div>
+            </div> <!-- End LLM Task Executor Tab Panel -->
+
+            <!-- Financial Dashboard Tab Panel -->
+            <div id="tab-finance-dashboard" class="tab-panel">
+                <h1>Financial Dashboard</h1>
+                <p>Overview of key financial metrics and performance.</p>
+
+                <div class="financial-widgets">
+                    <div class="widget">
+                        <h3>Total Revenue (MTD)</h3>
+                        <div class="value positive">$12,580.50</div>
+                        <div class="change">+5.2% vs last month</div>
+                    </div>
+                    <div class="widget">
+                        <h3>Expenses (MTD)</h3>
+                        <div class="value negative">$6,120.75</div>
+                        <div class="change">-1.8% vs last month</div>
+                    </div>
+                    <div class="widget">
+                        <h3>Net Profit (MTD)</h3>
+                        <div class="value positive">$6,459.75</div>
+                        <div class="change">+11.5% vs last month</div>
+                    </div>
+                     <div class="widget">
+                        <h3>Account Balance</h3>
+                        <div class="value">$88,234.10</div>
+                        <div class="change">As of today</div>
+                    </div>
+                </div>
+
+                <div class="placeholder-chart">
+                    Placeholder for Monthly Performance Chart
+                </div>
+
+                 <div class="placeholder-chart" style="margin-top: 20px;">
+                    Placeholder for Expense Category Breakdown
+                </div>
+
+            </div> <!-- End Financial Dashboard Tab Panel -->
+
+        </div> <!-- End Tab Content Area -->
+
+    </div> <!-- End Container -->
+
+    <script>
+        // --- Tab Switching Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const tabButtons = document.querySelectorAll('.tab-link');
+            const tabPanels = document.querySelectorAll('.tab-panel');
+
+            // Function to set active tab
+            function setActiveTab(targetId) {
+                tabButtons.forEach(btn => {
+                    if (btn.getAttribute('data-target') === targetId) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                });
+
+                tabPanels.forEach(panel => {
+                    if (panel.id === targetId) {
+                        panel.classList.add('active');
+                    } else {
+                        panel.classList.remove('active');
+                    }
+                });
+            }
+
+            // Set initial active tab (first one)
+             if (tabButtons.length > 0) {
+                setActiveTab(tabButtons[0].getAttribute('data-target'));
+             }
+
+
+            // Add click listeners
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetId = button.getAttribute('data-target');
+                    setActiveTab(targetId);
+                });
+            });
+        });
+
+
+        // --- Existing Form Submission & Result Display Logic (No changes needed here) ---
+        const promptForm = document.getElementById('promptForm');
+        const promptInput = document.getElementById('promptInput');
+        const maxRetriesInput = document.getElementById('maxRetriesInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const statusDiv = document.getElementById('status');
+        const resultsDiv = document.getElementById('results');
+
+        if (promptForm) {
+            promptForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const prompt = promptInput.value.trim();
+                const maxRetries = parseInt(maxRetriesInput.value, 10);
+
+                if (!prompt) {
+                    showStatus('Please enter a task description.', 'error'); return;
+                }
+                if (isNaN(maxRetries) || maxRetries < 0 || maxRetries > 10) {
+                    showStatus('Max Retries must be a number between 0 and 10.', 'error'); return;
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Executing...';
+                showStatus('Processing... Contacting LLM and executing commands...', 'loading');
+                resultsDiv.innerHTML = '';
+
+                try {
+                    const response = await fetch('/execute', { /* ... fetch options ... */
+                       method: 'POST',
+                        headers: { 'Content-Type': 'application/json', },
+                        body: JSON.stringify({ prompt: prompt, max_retries: maxRetries })
+                    });
+                    statusDiv.style.display = 'none'; // Hide loading message
+
+                    if (!response.ok) {
+                        let errorMsg = `Error: ${response.status} ${response.statusText}`;
+                        try { const errorData = await response.json(); errorMsg = `Error: ${errorData.error || response.statusText} - ${errorData.message || 'No details.'}`; } catch (e) { }
+                        throw new Error(errorMsg);
+                    }
+                    const data = await response.json();
+                    displayResults(data);
+                    showStatus(data.overall_success ? 'Task completed successfully.' : 'Task finished, but errors occurred (see details below).', data.overall_success ? 'success' : 'error');
+
+                } catch (error) {
+                    console.error('Fetch Error:', error);
+                    showStatus(`Error: ${error.message || 'Failed to process request.'}`, 'error');
+                    resultsDiv.innerHTML = `<p><strong>An application error occurred:</strong> ${escapeHtml(error.message)}</p>`;
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Execute Task';
+                }
+            });
+        }
+
+        function showStatus(message, type = 'info') {
+            if(statusDiv) { statusDiv.textContent = message; statusDiv.className = `status-${type}`; statusDiv.style.display = 'block'; }
+            else { console.warn("Status div not found."); }
+        }
+
+        function displayResults(data) {
+             if(!resultsDiv) { console.warn("Results div not found."); return; }
+            resultsDiv.innerHTML = '';
+            if (!data || !data.results || data.results.length === 0) { resultsDiv.innerHTML = '<p>No execution attempts recorded.</p>'; return; }
+
+            const overallStatusText = data.overall_success ? '<h2 style="color: #28a745;">Overall Status: Success</h2>' : '<h2 style="color: #dc3545;">Overall Status: Failed</h2>';
+            resultsDiv.innerHTML += overallStatusText;
+
+            data.results.forEach((attempt) => { /* ... code to display each attempt ... */
+                const attemptDiv = document.createElement('div');
+                attemptDiv.className = 'attempt';
+                let content = `<h3>Attempt ${attempt.attempt}</h3>`;
+                content += `<p><strong>Prompt Sent:</strong></p><pre>${escapeHtml(attempt.prompt_sent || 'N/A')}</pre>`;
+                let commandsHtml = '<ul>';
+                if (attempt.llm_commands && attempt.llm_commands.length > 0) { attempt.llm_commands.forEach(cmd => { commandsHtml += `<li><code>${escapeHtml(cmd)}</code></li>`; }); }
+                else { commandsHtml += '<li>(No commands proposed)</li>'; }
+                commandsHtml += '</ul>';
+                content += `<p><strong>LLM Commands Proposed:</strong></p>${commandsHtml}`;
+                content += `<p><strong>Execution Success:</strong> <span style="font-weight: bold; color: ${attempt.execution_success ? '#28a745' : '#dc3545'};">${attempt.execution_success}</span></p>`;
+                if (attempt.stdout && attempt.stdout.trim()) { content += `<p><strong>Output (stdout):</strong></p><pre>${escapeHtml(attempt.stdout)}</pre>`; }
+                else { content += `<p><strong>Output (stdout):</strong> <pre>(empty)</pre></p>`; }
+                if (attempt.stderr && attempt.stderr.trim()) { content += `<p><strong>Error Output (stderr):</strong></p><pre class="stderr">${escapeHtml(attempt.stderr)}</pre>`; }
+                else { content += `<p><strong>Error Output (stderr):</strong> <pre>(empty)</pre></p>`; }
+                attemptDiv.innerHTML = content;
+                resultsDiv.appendChild(attemptDiv);
+             });
+        }
+
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') { return unsafe; }
+            return unsafe.replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "\"").replace(/'/g, "'");
+        }
+
+    </script>
+</body>
+</html>

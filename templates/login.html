@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title or "Login" }} - LLM Commander</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f0f2f5; }
+        .login-container { background: #fff; padding: 40px; width: 100%; max-width: 400px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
+        h1 { margin-top: 0; margin-bottom: 20px; color: #1c1e21; font-size: 1.8em; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; text-align: left; color: #4b4f56; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccd0d5; border-radius: 6px; box-sizing: border-box; font-size: 1em; }
+        button[type="submit"] { background-color: #1877f2; color: white; padding: 12px 20px; border: none; border-radius: 6px; cursor: pointer; width: 100%; font-size: 1.1em; font-weight: bold; transition: background-color 0.2s; }
+        button[type="submit"]:hover { background-color: #166fe5; }
+        button[type="submit"]:focus { outline: 2px solid #e7f3ff; }
+        .flash-messages { margin-bottom: 15px; padding: 0; list-style: none; }
+        .flash-messages li { padding: 10px; border-radius: 6px; margin-bottom: 10px; font-weight: 500; }
+        .flash-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .flash-warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .flash-info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .flash-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .form-group { margin-bottom: 15px; }
+        /* Hide default submit button if using <button> */
+        input[type="submit"] { display: none; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>Commander Login</h1>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flash-messages">
+              {% for category, message in messages %}
+                <li class="flash-{{ category }}">{{ message }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <!-- Login Form -->
+        <form method="POST" action="{{ url_for('login') }}" novalidate>
+             <!-- Include CSRF token -->
+             {{ form.hidden_tag() }}
+            <div class="form-group">
+                {{ form.username.label }}
+                {{ form.username(size=32, placeholder="Enter your username") }}
+                {% for error in form.username.errors %}
+                  <span style="color: red; font-size: 0.8em;">[{{ error }}]</span>
+                {% endfor %}
+            </div>
+            <div class="form-group">
+                 {{ form.password.label }}
+                 {{ form.password(size=32, placeholder="Enter your password") }}
+                 {% for error in form.password.errors %}
+                   <span style="color: red; font-size: 0.8em;">[{{ error }}]</span>
+                 {% endfor %}
+            </div>
+            <div>
+                <!-- Use button for better styling control -->
+                <button type="submit">Login</button>
+                <!-- {{ form.submit() }} --> <!-- Use this if you prefer WTForms default button -->
+            </div>
+        </form>
+    </div>
+</body>
+</html>
