@@ -1,8 +1,11 @@
+# --- START OF FILE llm-commander/web_server.py ---
+
 # llm-commander/web_server.py
 import os
 import logging
 import socket
 import getpass
+from logging.handlers import RotatingFileHandler # Use rotating file handler
 
 from flask import (
     Flask, request, jsonify, render_template,
@@ -20,7 +23,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 # Import configuration and the main app class
 from config import settings
 from llm_commander import LLMCommanderApp # Import the main application class
-from log_setup import error_logger, conversation_logger # Import loggers if needed directly
+from log_setup import error_logger, LOGS_DIR # Import error logger and logs dir
 
 # --- Initialize Core Application Logic ---
 # Create a single instance of the main application
@@ -31,7 +34,7 @@ except Exception as app_init_err:
     # Log critical failure during core app initialization
     error_logger.critical(f"Failed to initialize LLMCommanderApp: {app_init_err}", exc_info=True)
     print(f"FATAL ERROR: Could not initialize core application logic: {app_init_err}")
-    print("Check error.log for details. Exiting.")
+    print(f"Check {os.path.join(LOGS_DIR, 'error.log')} for details. Exiting.")
     exit(1)
 
 
@@ -54,6 +57,7 @@ try:
 except Exception as hash_err:
     error_logger.critical(f"Failed to hash web password: {hash_err}", exc_info=True)
     print(f"FATAL ERROR: Could not hash web password: {hash_err}")
+    print(f"Check {os.path.join(LOGS_DIR, 'error.log')} for details. Exiting.")
     exit(1)
 
 class User(UserMixin):
@@ -73,9 +77,27 @@ class LoginForm(FlaskForm):
     submit = SubmitField('Login')
 
 # --- Logging Setup ---
-# Use Flask's logger, potentially add file handler if needed beyond error.log
-# Basic logging is handled by log_setup.py, Flask logger can be used for web-specific events.
-app.logger.setLevel(logging.INFO) # Adjust level as needed
+# Ensure logs directory exists (should be handled by log_setup, but check again)
+if not os.path.exists(LOGS_DIR):
+    try:
+        os.makedirs(LOGS_DIR, exist_ok=True)
+    except OSError as e:
+        app.logger.error(f"Failed to create log directory '{LOGS_DIR}': {e}") # Log to Flask's default handler
+
+# Configure Flask's logger to write to a file
+log_file = os.path.join(LOGS_DIR, 'web_server.log')
+file_handler = RotatingFileHandler(log_file, maxBytes=1024*1024*5, backupCount=3, encoding='utf-8') # 5MB file, 3 backups
+file_handler.setLevel(logging.INFO) # Set level for file handler
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s [%(pathname)s:%(lineno)d]')
+file_handler.setFormatter(formatter)
+
+# Configure Flask's logger
+app.logger.addHandler(file_handler)
+app.logger.setLevel(logging.INFO) # Set overall level for the logger
+# Remove default Flask handler if you only want file logging
+# app.logger.removeHandler(flask.logging.default_handler)
+
+app.logger.info("Flask application logger configured.")
 
 # --- Routes ---
 
@@ -96,6 +118,7 @@ def login():
             login_user(user)
             app.logger.info(f"Login successful for user: {username}")
             next_page = request.args.get('next')
+            # Basic Open Redirect protection
             if next_page and (not next_page.startswith('/') or next_page.startswith('//') or ':' in next_page):
                  app.logger.warning(f"Invalid next_page value detected during login: {next_page}. Redirecting to index.")
                  next_page = None # Prevent open redirect
@@ -153,6 +176,7 @@ def handle_execute():
 
     try:
         # --- Call the main application logic ---
+        # This call now handles its own detailed logging to conversation files
         success, results = llm_commander_app.process_task(initial_prompt, max_retries)
         # --- ---
 
@@ -165,7 +189,7 @@ def handle_execute():
     except Exception as e:
         # Catch unexpected errors from the core logic
         app.logger.error(f"Unhandled exception during prompt processing for user '{user_id}': {e}", exc_info=True)
-        # Also log to the dedicated error log via the already configured error_logger
+        # Also log to the dedicated error log via the imported error_logger
         error_logger.error(f"Web server caught unhandled exception during prompt processing for user '{user_id}', prompt '{initial_prompt[:50]}...': {e}", exc_info=True)
         return jsonify({"error": "Internal Server Error", "message": "An unexpected error occurred processing your request."}), 500
 
@@ -174,6 +198,7 @@ def handle_execute():
 @app.route('/health', methods=['GET'])
 def health_check():
     # Could add more checks here (e.g., LLM connectivity if needed)
+    app.logger.debug("Health check endpoint accessed.")
     return jsonify({"status": "ok"}), 200
 
 # --- Utility ---
@@ -214,6 +239,7 @@ if __name__ == '__main__':
     print("Ensure it runs ONLY in a SECURE, TRUSTED environment.")
     print("NEVER expose this directly to the internet without robust security.")
     print("---")
+    print(f"Logging to directory: {LOGS_DIR}")
     print(f"Flask App Secret Key is set: {'Yes' if settings['FLASK_SECRET_KEY'] else 'NO - CRITICAL SECURITY ISSUE!'}")
     print(f"Web UI Username: {WEB_USERNAME}")
     print(f"Access the login page via http://<your-ip>:{port}/login or http://localhost:{port}/login")
@@ -224,3 +250,4 @@ if __name__ == '__main__':
     # from waitress import serve
     # serve(app, host=host_ip, port=port)
     app.run(host=host_ip, port=port, debug=False) # debug=False is crucial for security
+# --- END OF FILE llm-commander/web_server.py ---

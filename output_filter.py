@@ -1,9 +1,10 @@
 # llm-commander/output_filter.py
+# No changes required in this file. It remains the same.
 import re
 import logging
 
-# Use the logger configured in log_setup
-logger = logging.getLogger(__name__) # Get logger for this module
+# Use the main error logger configured in log_setup if needed for internal errors
+from log_setup import error_logger # For filter's own errors
 
 class OutputFilter:
     """
@@ -25,12 +26,13 @@ class OutputFilter:
             success_lines: Number of lines to keep from the end on success.
         """
         if not isinstance(success_lines, int) or success_lines <= 0:
-            logger.warning(f"Invalid success_lines value ({success_lines}), using default {self.DEFAULT_SUCCESS_LINES}.")
+            error_logger.warning(f"Invalid success_lines value ({success_lines}), using default {self.DEFAULT_SUCCESS_LINES}.")
             self.success_lines = self.DEFAULT_SUCCESS_LINES
         else:
             self.success_lines = success_lines
-        # Use logger from log_setup
-        logger.info(f"OutputFilter initialized to keep last {self.success_lines} lines on success.")
+        # Use logger from log_setup if needed for operational info
+        # logging.getLogger(__name__).info(f"OutputFilter initialized...") # Example
+        error_logger.info(f"OutputFilter initialized to keep last {self.success_lines} lines on success.") # Use error_logger for config info
 
     def _extract_tracebacks_regex(self, data: str) -> str:
         """Attempts to extract tracebacks using regex."""
@@ -39,7 +41,7 @@ class OutputFilter:
             if matches:
                 return "\n---\n".join(matches)
         except Exception as e:
-            logger.error(f"Error during regex traceback extraction: {e}", exc_info=True)
+            error_logger.error(f"Error during regex traceback extraction: {e}", exc_info=True)
         return ""
 
     def _extract_tracebacks_lines(self, data: str) -> str:
@@ -64,7 +66,7 @@ class OutputFilter:
 
             return "\n".join(traceback_lines)
         except Exception as e:
-             logger.error(f"Error during line-based traceback extraction: {e}", exc_info=True)
+             error_logger.error(f"Error during line-based traceback extraction: {e}", exc_info=True)
              return ""
 
     def filter(self, output_data: str, success: bool) -> str:
@@ -79,30 +81,33 @@ class OutputFilter:
             The filtered output string.
         """
         if not isinstance(output_data, str):
-            logger.warning("Invalid input type for output_data in filter, expected string.")
+            error_logger.warning("Invalid input type for output_data in filter, expected string.")
             return ""
 
+        # Use debug level for filtering actions if desired
+        # logging.getLogger(__name__).debug(f"Filtering output. Success={success}")
+
         if not success:
-            logger.debug("Filtering output for failure: extracting tracebacks.")
+            # error_logger.debug("Filtering output for failure: extracting tracebacks.")
             filtered_output = self._extract_tracebacks_regex(output_data)
             if not filtered_output:
-                 logger.debug("Regex found no tracebacks, trying line-based fallback.")
+                 # error_logger.debug("Regex found no tracebacks, trying line-based fallback.")
                  filtered_output = self._extract_tracebacks_lines(output_data)
 
             if filtered_output:
-                logger.info("Traceback found and extracted.")
+                # error_logger.info("Traceback found and extracted.") # Can be noisy
                 return f"[Filtered for Tracebacks]\n---\n{filtered_output.strip()}\n---"
             else:
-                 logger.info("No traceback found on failure, returning last lines.")
+                 # error_logger.info("No traceback found on failure, returning last lines.")
                  lines = output_data.splitlines()
                  last_lines = lines[-self.success_lines:]
                  return f"[Failure: No Traceback Found - Showing Last {len(last_lines)} Lines]\n...\n" + "\n".join(last_lines)
         else:
-            logger.debug(f"Filtering output for success: keeping last {self.success_lines} lines.")
+            # error_logger.debug(f"Filtering output for success: keeping last {self.success_lines} lines.")
             lines = output_data.splitlines()
             if len(lines) <= self.success_lines:
                 return output_data
             else:
                 last_lines = lines[-self.success_lines:]
-                logger.info(f"Output truncated to last {len(last_lines)} lines.")
+                # error_logger.info(f"Output truncated to last {len(last_lines)} lines.") # Can be noisy
                 return f"... (last {len(last_lines)} lines of output)\n" + "\n".join(last_lines)

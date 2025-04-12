@@ -1,3 +1,5 @@
+# --- START OF FILE llm-commander/llm_client.py ---
+
 # llm-commander/llm_client.py
 import logging
 import json
@@ -5,9 +7,11 @@ from datetime import datetime, timedelta
 from collections import deque
 import google.generativeai as genai
 
-# Use the logger configured in log_setup
-logger = logging.getLogger(__name__)
-conversation_logger = logging.getLogger('ConversationLogger') # Get conversation logger
+# Use the main error logger configured in log_setup for client-level errors
+from log_setup import error_logger
+
+# Default logger if none is passed to methods (logs only critical config errors)
+default_logger = logging.getLogger(__name__)
 
 class LLMClient:
     """Handles interactions with the Google Generative AI API."""
@@ -24,14 +28,14 @@ class LLMClient:
                 raise ValueError("Gemini API Key is required.")
             genai.configure(api_key=api_key)
             self.model = genai.GenerativeModel(self.model_name)
-            logger.info(f"Successfully configured Gemini model: {self.model_name}")
+            # Use main error logger for setup info/errors
+            error_logger.info(f"Successfully configured Gemini model: {self.model_name}")
         except Exception as e:
-            logger.critical(f"Fatal: Failed to configure Gemini: {e}", exc_info=True)
+            error_logger.critical(f"Fatal: Failed to configure Gemini: {e}", exc_info=True)
             raise RuntimeError(f"Failed to configure Gemini LLM: {e}") from e
 
-    def _check_rate_limit(self, conv_id: str) -> tuple[bool, str]:
+    def _check_rate_limit(self, conv_id: str, task_logger: logging.Logger) -> tuple[bool, str]:
         """Checks if an API call is allowed based on rate limits."""
-        log_extra = {'conv_id': conv_id}
         now = datetime.now()
         one_minute_ago = now - timedelta(minutes=1)
         while self.api_call_times_minute and self.api_call_times_minute[0] < one_minute_ago:
@@ -41,14 +45,14 @@ class LLMClient:
             self.api_call_times_day.popleft()
 
         if len(self.api_call_times_minute) >= self.max_calls_minute:
-            msg = "Rate limit per minute exceeded."
-            logger.warning(msg, extra=log_extra)
-            conversation_logger.warning(f"LLM Call Aborted: {msg}", extra=log_extra)
+            msg = f"Rate limit per minute exceeded ({self.max_calls_minute}/min)."
+            task_logger.warning(f"LLM Call Aborted (ConvID: {conv_id}): {msg}")
+            error_logger.warning(f"LLM Rate limit hit (minute) for ConvID: {conv_id}") # Also log to main error log
             return False, msg
         if len(self.api_call_times_day) >= self.max_calls_day:
-            msg = "Rate limit per day exceeded."
-            logger.warning(msg, extra=log_extra)
-            conversation_logger.warning(f"LLM Call Aborted: {msg}", extra=log_extra)
+            msg = f"Rate limit per day exceeded ({self.max_calls_day}/day)."
+            task_logger.warning(f"LLM Call Aborted (ConvID: {conv_id}): {msg}")
+            error_logger.warning(f"LLM Rate limit hit (day) for ConvID: {conv_id}") # Also log to main error log
             return False, msg
         return True, "OK"
 
@@ -58,10 +62,22 @@ class LLMClient:
         self.api_call_times_minute.append(now)
         self.api_call_times_day.append(now)
 
-    def get_llm_commands(self, prompt_text: str, conv_id: str) -> list[str]:
-        """Gets commands from the LLM based on a user prompt."""
-        log_extra = {'conv_id': conv_id}
-        allowed, message = self._check_rate_limit(conv_id)
+    def get_llm_commands(self, prompt_text: str, conv_id: str, task_logger: logging.Logger) -> list[str]:
+        """
+        Gets commands from the LLM based on a user prompt.
+
+        Args:
+            prompt_text: The user request or context.
+            conv_id: The conversation ID.
+            task_logger: The logger instance specific to this task.
+
+        Returns:
+            A list of command strings.
+
+        Raises:
+            Exception: If rate limit exceeded or LLM interaction fails.
+        """
+        allowed, message = self._check_rate_limit(conv_id, task_logger)
         if not allowed:
             raise Exception(f"Rate limit exceeded: {message}")
 
@@ -73,14 +89,15 @@ If you cannot determine appropriate commands or the request is unclear/unsafe, r
 """
         full_prompt = f"{system_prompt}\n\nUser Request/Error:\n{prompt_text}"
 
-        conversation_logger.info(f"LLM Prompt (Command Gen):\n{full_prompt}", extra=log_extra)
-        logger.info(f"Sending command generation prompt to LLM (ConvID: {conv_id}).")
+        task_logger.info(f"LLM Prompt (Command Gen):\n{full_prompt}")
+        # Log to main logger too for general monitoring, but less detail
+        default_logger.info(f"Sending command generation prompt to LLM (ConvID: {conv_id}).")
 
         try:
             self._record_api_call()
             response = self.model.generate_content(full_prompt)
             raw_response_text = response.text.strip()
-            conversation_logger.info(f"LLM Raw Response (Command Gen):\n{raw_response_text}", extra=log_extra)
+            task_logger.info(f"LLM Raw Response (Command Gen):\n{raw_response_text}")
 
             # Handle markdown code block wrappers
             if raw_response_text.startswith("```json"): raw_response_text = raw_response_text[7:]
@@ -91,37 +108,57 @@ If you cannot determine appropriate commands or the request is unclear/unsafe, r
                 parsed_json = json.loads(raw_response_text)
             except json.JSONDecodeError as json_e:
                 error_msg = f"LLM response (commands) was not valid JSON: {json_e}. Response: {raw_response_text}"
-                logger.error(error_msg, exc_info=True, extra=log_extra)
-                conversation_logger.error(f"LLM Response Parse Error (Command Gen): {error_msg}", extra=log_extra)
+                task_logger.error(f"LLM Response Parse Error (Command Gen): {error_msg}")
+                error_logger.error(f"LLM JSON Parse Error (ConvID: {conv_id}): {error_msg}", exc_info=True) # Also to main error log
                 raise ValueError(f"LLM command response was not valid JSON.") from json_e
 
             # Validate structure
             if not isinstance(parsed_json, dict) or "commands" not in parsed_json:
-                 conversation_logger.error(f"LLM Invalid Structure (Command Gen): Missing 'commands' key. Response: {parsed_json}", extra=log_extra)
+                 error_msg = f"LLM Invalid Structure (Command Gen): Missing 'commands' key. Response: {parsed_json}"
+                 task_logger.error(error_msg)
+                 error_logger.error(f"LLM Structure Error (ConvID: {conv_id}): {error_msg}")
                  raise ValueError("LLM JSON (commands) missing 'commands' key.")
             commands = parsed_json["commands"]
             if not isinstance(commands, list):
-                 conversation_logger.error(f"LLM Invalid Structure (Command Gen): 'commands' not a list. Response: {parsed_json}", extra=log_extra)
+                 error_msg = f"LLM Invalid Structure (Command Gen): 'commands' not a list. Response: {parsed_json}"
+                 task_logger.error(error_msg)
+                 error_logger.error(f"LLM Structure Error (ConvID: {conv_id}): {error_msg}")
                  raise ValueError("'commands' value must be a list.")
             if not all(isinstance(cmd, str) for cmd in commands):
-                 conversation_logger.error(f"LLM Invalid Structure (Command Gen): Command list has non-string. Response: {parsed_json}", extra=log_extra)
+                 error_msg = f"LLM Invalid Structure (Command Gen): Command list has non-string. Response: {parsed_json}"
+                 task_logger.error(error_msg)
+                 error_logger.error(f"LLM Structure Error (ConvID: {conv_id}): {error_msg}")
                  raise ValueError("Command list contains non-string elements.")
 
-            conversation_logger.info(f"LLM Parsed Commands: {commands}", extra=log_extra)
-            logger.info(f"LLM proposed commands (ConvID: {conv_id}): {commands}")
+            task_logger.info(f"LLM Parsed Commands: {commands}")
+            default_logger.info(f"LLM proposed commands (ConvID: {conv_id}): {commands}")
             return commands
 
         except Exception as e:
-            logger.error(f"Error during LLM command generation: {e}", exc_info=True, extra=log_extra)
-            conversation_logger.error(f"LLM Call/Processing Error (Command Gen): {e}", exc_info=True, extra=log_extra)
+            # Log specific error details to task log and general error to main/error log
+            task_logger.error(f"LLM Call/Processing Error (Command Gen): {e}", exc_info=True)
+            error_logger.error(f"Error during LLM command generation (ConvID: {conv_id}): {e}", exc_info=True)
             # Re-raise as a generic exception to be caught by the main loop
             raise Exception(f"Error interacting with LLM for command generation: {e}") from e
 
 
-    def get_llm_interactive_response(self, prompt_context: str, original_goal: str, conv_id: str) -> str:
-        """Gets a suggested response from the LLM for an interactive command prompt."""
-        log_extra = {'conv_id': conv_id}
-        allowed, message = self._check_rate_limit(conv_id)
+    def get_llm_interactive_response(self, prompt_context: str, original_goal: str, conv_id: str, task_logger: logging.Logger) -> str:
+        """
+        Gets a suggested response from the LLM for an interactive command prompt.
+
+        Args:
+            prompt_context: The text context around the interactive prompt.
+            original_goal: The initial task goal.
+            conv_id: The conversation ID.
+            task_logger: The logger instance specific to this task.
+
+        Returns:
+            The suggested response string.
+
+        Raises:
+            Exception: If rate limit exceeded or LLM interaction fails.
+        """
+        allowed, message = self._check_rate_limit(conv_id, task_logger)
         if not allowed:
             raise Exception(f"Rate limit exceeded (interactive): {message}")
 
@@ -141,25 +178,26 @@ Command Output Snippet (containing the prompt):
 Your suggested input:"""
         full_prompt = system_prompt.format(goal=original_goal, context=prompt_context)
 
-        conversation_logger.info(f"LLM Prompt (Interactive Resp):\n{full_prompt}", extra=log_extra)
-        logger.info(f"Sending interactive prompt context to LLM (ConvID: {conv_id}).")
+        task_logger.info(f"LLM Prompt (Interactive Resp):\n{full_prompt}")
+        default_logger.info(f"Sending interactive prompt context to LLM (ConvID: {conv_id}).")
 
         try:
             self._record_api_call()
             response = self.model.generate_content(full_prompt)
             answer = response.text.strip()
-            conversation_logger.info(f"LLM Raw Response (Interactive Resp): {answer}", extra=log_extra)
+            task_logger.info(f"LLM Raw Response (Interactive Resp): {answer}")
 
             # Basic cleanup
             if (answer.startswith('"') and answer.endswith('"')) or \
                (answer.startswith("'") and answer.endswith("'")):
                 answer = answer[1:-1]
 
-            conversation_logger.info(f"LLM Cleaned Response (Interactive Resp): '{answer}'", extra=log_extra)
-            logger.info(f"LLM suggested interactive response (ConvID: {conv_id}): '{answer}'")
+            task_logger.info(f"LLM Cleaned Response (Interactive Resp): '{answer}'")
+            default_logger.info(f"LLM suggested interactive response (ConvID: {conv_id}): '{answer}'")
             return answer
 
         except Exception as e:
-            logger.error(f"Error during LLM interactive response call: {e}", exc_info=True, extra=log_extra)
-            conversation_logger.error(f"LLM Call/Processing Error (Interactive Resp): {e}", exc_info=True, extra=log_extra)
+            task_logger.error(f"LLM Call/Processing Error (Interactive Resp): {e}", exc_info=True)
+            error_logger.error(f"Error during LLM interactive response call (ConvID: {conv_id}): {e}", exc_info=True)
             raise Exception(f"Error interacting with LLM for interactive response: {e}") from e
+# --- END OF FILE llm-commander/llm_client.py ---
