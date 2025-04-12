@@ -1,5 +1,3 @@
-# --- START OF FILE llm-commander/command_executor.py ---
-
 # llm-commander/command_executor.py
 import logging
 import re
@@ -268,4 +266,3 @@ class CommandExecutor:
         task_logger.info(f"Finished execution block. Overall success this block: {overall_success}")
         print("--- Command Execution Block Finished ---")
         return overall_success, full_log.strip(), final_stderr.strip()
-# --- END OF FILE llm-commander/command_executor.py ---

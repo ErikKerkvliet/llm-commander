@@ -1,5 +1,3 @@
-# --- START OF FILE llm-commander/log_setup.py ---
-
 # llm-commander/log_setup.py
 import logging
 import os
@@ -51,5 +49,3 @@ def setup_loggers():
 
 # Configure loggers when module is imported
 error_logger = setup_loggers()
-
-# --- END OF FILE llm-commander/log_setup.py ---

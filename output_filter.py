@@ -17,7 +17,7 @@ class OutputFilter:
         re.MULTILINE
     )
     TRACEBACK_START_MARKER = "Traceback (most recent call last):"
-    DEFAULT_SUCCESS_LINES = 20
+    DEFAULT_SUCCESS_LINES = 2000000
 
     def __init__(self, success_lines: int = DEFAULT_SUCCESS_LINES):
         """
@@ -69,6 +69,47 @@ class OutputFilter:
              error_logger.error(f"Error during line-based traceback extraction: {e}", exc_info=True)
              return ""
 
+    @staticmethod
+    def filter_collapse_pair_empty(lines):
+        """
+        Filters a list of strings according to specific rules for empty strings ('').
+
+        - Keeps non-empty strings (including whitespace-only).
+        - Replaces exactly two consecutive '' with a single ''.
+        - Removes single occurrences of ''.
+        - Handles >2 consecutive '' based on pairs (e.g., '' '' '' -> '').
+
+        Args:
+            lines: A list of strings.
+
+        Returns:
+            A new list of strings with filtering applied.
+        """
+        filtered_lines = []
+        i = 0
+        n = len(lines)
+
+        while i < n:
+            current_line = lines[i]
+
+            if current_line != '':
+                # Rule 1: Keep non-empty lines
+                filtered_lines.append(current_line)
+                i += 1
+            else:
+                # Current line is '' - check the next one
+                # Check if there *is* a next line and if it's *also* ''
+                if i + 1 < n and lines[i + 1] == '':
+                    # Rule 2: Found two consecutive ''
+                    filtered_lines.append('')  # Add one '' to represent the pair
+                    i += 2  # Skip both processed ''
+                else:
+                    # Rule 3: This is a single '' (or the last item)
+                    # Remove it by doing nothing (not appending)
+                    i += 1  # Move past the single ''
+
+        return filtered_lines
+
     def filter(self, output_data: str, success: bool) -> str:
         """
         Filters the output data based on the success flag.
@@ -105,8 +146,10 @@ class OutputFilter:
         else:
             # error_logger.debug(f"Filtering output for success: keeping last {self.success_lines} lines.")
             lines = output_data.splitlines()
+            lines = self.filter_collapse_pair_empty(lines)
+
             if len(lines) <= self.success_lines:
-                return output_data
+                return '\n'.join(lines)
             else:
                 last_lines = lines[-self.success_lines:]
                 # error_logger.info(f"Output truncated to last {len(last_lines)} lines.") # Can be noisy

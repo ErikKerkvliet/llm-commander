@@ -1,5 +1,3 @@
-# --- START OF FILE llm-commander/llm_client.py ---
-
 # llm-commander/llm_client.py
 import logging
 import json
@@ -200,4 +198,3 @@ Your suggested input:"""
             task_logger.error(f"LLM Call/Processing Error (Interactive Resp): {e}", exc_info=True)
             error_logger.error(f"Error during LLM interactive response call (ConvID: {conv_id}): {e}", exc_info=True)
             raise Exception(f"Error interacting with LLM for interactive response: {e}") from e
-# --- END OF FILE llm-commander/llm_client.py ---

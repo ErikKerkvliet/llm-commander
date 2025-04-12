@@ -1,6 +1,3 @@
-# --- START OF FILE llm-commander/web_server.py ---
-
-# llm-commander/web_server.py
 import os
 import logging
 import socket
@@ -37,10 +34,34 @@ except Exception as app_init_err:
     print(f"Check {os.path.join(LOGS_DIR, 'error.log')} for details. Exiting.")
     exit(1)
 
+# --- Initialize Core Application Logic ---
+# Create a single instance of the main application
+# This instance holds the LLM client, executor, etc.
+try:
+    llm_commander_app = LLMCommanderApp()
+except Exception as app_init_err:
+    # Log critical failure during core app initialization
+    # Check if error_logger was initialized before trying to use it
+    if 'error_logger' in locals() or 'error_logger' in globals():
+         error_logger.critical(f"Failed to initialize LLMCommanderApp: {app_init_err}", exc_info=True)
+         log_path = os.path.join(LOGS_DIR, 'error.log')
+    else:
+         log_path = "error.log (logging not fully initialized)"
+    print(f"FATAL ERROR: Could not initialize core application logic: {app_init_err}")
+    print(f"Check {log_path} for details. Exiting.")
+    exit(1)
+
 
 # --- Flask App Setup ---
-app = Flask(__name__) # Looks for templates in 'templates' folder
-app.config['SECRET_KEY'] = settings['FLASK_SECRET_KEY']
+# By default, Flask looks for templates in a 'templates' folder
+# in the same directory as the script, or specified via template_folder
+app = Flask(__name__, template_folder='templates') # Explicitly state template folder
+app.config['SECRET_KEY'] = settings.get('FLASK_SECRET_KEY', None) # Use .get for safety
+
+if not app.config['SECRET_KEY']:
+     print("FATAL ERROR: FLASK_SECRET_KEY is not set in the configuration.")
+     # Optionally log this if logger is available
+     exit(1)
 
 # --- Flask-Login Setup ---
 login_manager = LoginManager()
@@ -50,10 +71,16 @@ login_manager.login_message_category = "warning"
 login_manager.login_message = "Please log in to access this page."
 
 # --- User Data & Class ---
-WEB_USERNAME = settings['WEB_USERNAME']
+WEB_USERNAME = settings.get('WEB_USERNAME')
+WEB_PASSWORD = settings.get('WEB_PASSWORD') # Get the plain password first
+
+if not WEB_USERNAME or not WEB_PASSWORD:
+    print("FATAL ERROR: WEB_USERNAME or WEB_PASSWORD not set in configuration.")
+    exit(1)
+
 # Hash the password ONCE at startup
 try:
-    WEB_PASSWORD_HASH = generate_password_hash(settings['WEB_PASSWORD'])
+    WEB_PASSWORD_HASH = generate_password_hash(WEB_PASSWORD)
 except Exception as hash_err:
     error_logger.critical(f"Failed to hash web password: {hash_err}", exc_info=True)
     print(f"FATAL ERROR: Could not hash web password: {hash_err}")
@@ -82,28 +109,38 @@ if not os.path.exists(LOGS_DIR):
     try:
         os.makedirs(LOGS_DIR, exist_ok=True)
     except OSError as e:
-        app.logger.error(f"Failed to create log directory '{LOGS_DIR}': {e}") # Log to Flask's default handler
+        # Use print as logger might not be fully ready here depending on execution order
+        print(f"Warning: Failed to create log directory '{LOGS_DIR}': {e}")
 
 # Configure Flask's logger to write to a file
 log_file = os.path.join(LOGS_DIR, 'web_server.log')
-file_handler = RotatingFileHandler(log_file, maxBytes=1024*1024*5, backupCount=3, encoding='utf-8') # 5MB file, 3 backups
-file_handler.setLevel(logging.INFO) # Set level for file handler
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s [%(pathname)s:%(lineno)d]')
-file_handler.setFormatter(formatter)
+try:
+    # Use rotating file handler
+    file_handler = RotatingFileHandler(log_file, maxBytes=1024*1024*5, backupCount=3, encoding='utf-8') # 5MB file, 3 backups
+    file_handler.setLevel(logging.INFO) # Set level for file handler
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s [%(pathname)s:%(lineno)d]')
+    file_handler.setFormatter(formatter)
 
-# Configure Flask's logger
-app.logger.addHandler(file_handler)
-app.logger.setLevel(logging.INFO) # Set overall level for the logger
-# Remove default Flask handler if you only want file logging
-# app.logger.removeHandler(flask.logging.default_handler)
+    # Configure Flask's logger
+    # Remove default handler first to avoid duplicate console logs if Flask adds one
+    if app.logger.hasHandlers():
+        app.logger.handlers.clear() # Clear existing handlers if any
 
-app.logger.info("Flask application logger configured.")
+    app.logger.addHandler(file_handler)
+    app.logger.setLevel(logging.INFO) # Set overall level for the logger
+
+    app.logger.info("Flask application file logger configured.")
+
+except Exception as log_setup_err:
+    print(f"ERROR setting up Flask file logging: {log_setup_err}. Logs might go to console only.")
+
 
 # --- Routes ---
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
+        # Redirect to the main page (which now renders the default tab)
         return redirect(url_for('index'))
 
     form = LoginForm()
@@ -120,14 +157,16 @@ def login():
             next_page = request.args.get('next')
             # Basic Open Redirect protection
             if next_page and (not next_page.startswith('/') or next_page.startswith('//') or ':' in next_page):
-                 app.logger.warning(f"Invalid next_page value detected during login: {next_page}. Redirecting to index.")
+                 app.logger.warning(f"Invalid 'next' parameter value detected during login: '{next_page}'. Redirecting to index.")
                  next_page = None # Prevent open redirect
             flash('Login successful!', 'success')
+            # Redirect to the originally requested page or the main page
             return redirect(next_page or url_for('index'))
         else:
             app.logger.warning(f"Login failed for user: {username}")
             flash('Invalid username or password.', 'danger')
 
+    # Render the specific login template
     return render_template('login.html', form=form, title="Login")
 
 @app.route('/logout')
@@ -137,15 +176,37 @@ def logout():
     logout_user()
     app.logger.info(f"User '{user_id}' logged out.")
     flash('You have been logged out.', 'info')
-    return redirect(url_for('login'))
+    return redirect(url_for('login')) # Redirect back to login page
 
+# --- Main Application Route ---
+# This route now renders the DEFAULT tab content file,
+# which extends base.html.
 @app.route('/')
 @login_required
 def index():
-    app.logger.info(f"Serving index page to user: {current_user.id}")
-    return render_template('index.html', username=current_user.id, title="Commander")
+    """Renders the main page, defaulting to the LLM Executor tab."""
+    app.logger.info(f"Serving default view (LLM Executor Tab) to user: {current_user.id}")
+    # Render the llm_executor_tab.html template.
+    # This template should contain {% extends "base.html" %}
+    # and define the content for the {% block tab_content %}.
+    # It should also have the 'active' class on its main panel div.
+    return render_template('llm_executor.html', username=current_user.id, title="LLM Task Executor")
 
-# --- API Endpoint ---
+# --- Optional: Route for the other tab (if direct linking is desired) ---
+# You might not need this if you solely rely on the JS tab switching,
+# but it's good practice for potentially linking directly to the dashboard.
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Renders the Financial Dashboard tab."""
+    app.logger.info(f"Serving Financial Dashboard Tab to user: {current_user.id}")
+    # Render the finance_dashboard_tab.html template.
+    # This template should also extend base.html.
+    # It should NOT have the 'active' class on its main panel div by default.
+    return render_template('finance_dashboard.html', username=current_user.id, title="Financial Dashboard")
+
+
+# --- API Endpoint (No changes needed in logic) ---
 @app.route('/execute', methods=['POST']) # Only POST for execution
 @login_required
 def handle_execute():
@@ -157,8 +218,12 @@ def handle_execute():
         return jsonify({"error": "Bad Request", "message": "Request must be JSON"}), 400
 
     data = request.get_json()
+    if not data: # Check if JSON body is empty or null
+        app.logger.error("Bad Request: Empty JSON payload received.")
+        return jsonify({"error": "Bad Request", "message": "Request body cannot be empty"}), 400
+
     initial_prompt = data.get('prompt')
-    max_retries_str = data.get('max_retries', '3')
+    max_retries_str = data.get('max_retries', '3') # Default to '3' as string
 
     try:
         max_retries = int(max_retries_str)
@@ -166,7 +231,7 @@ def handle_execute():
              raise ValueError("max_retries must be between 0 and 10")
     except (ValueError, TypeError):
         app.logger.error(f"Bad Request: Invalid 'max_retries' value: {max_retries_str}")
-        return jsonify({"error": "Bad Request", "message": "'max_retries' must be an integer between 0 and 10"}), 400
+        return jsonify({"error": "Bad Request", "message": f"'max_retries' must be an integer between 0 and 10. Received: {max_retries_str}"}), 400
 
     if not initial_prompt or not isinstance(initial_prompt, str) or initial_prompt.isspace():
         app.logger.error("Bad Request: 'prompt' is missing or invalid.")
@@ -203,51 +268,58 @@ def health_check():
 
 # --- Utility ---
 def get_local_ip_hostname():
-  """Gets the local IPv4 address associated with the hostname."""
+  """Gets a likely non-loopback local IPv4 address."""
   try:
-    hostname = socket.gethostname()
-    # Try getting all IPs and finding a non-loopback one if needed
-    ip_address = socket.gethostbyname(hostname)
-    # Basic check if it's loopback
-    if ip_address.startswith("127."):
-         # Try getting IPs associated with interfaces
-         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-         s.settimeout(0)
-         try:
-             # Doesn't have to be reachable
-             s.connect(('10.254.254.254', 1))
-             ip_address = s.getsockname()[0]
-         except Exception:
-             # Fallback if connect fails
-             ip_address = '127.0.0.1'
-         finally:
-             s.close()
-    return ip_address
-  except socket.gaierror:
+    # Use a socket connection to a public IP (doesn't actually send data)
+    # to determine the interface used for outgoing connections.
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.settimeout(0.1) # Timeout to avoid blocking
+        try:
+            # Doesn't have to be reachable
+            s.connect(('8.8.8.8', 1))
+            ip_address = s.getsockname()[0]
+        except OSError:
+            # Fallback if connect fails (e.g., no network)
+            ip_address = '127.0.0.1'
+        return ip_address
+  except Exception:
+    # Broad exception catch for any socket issues
     return "127.0.0.1" # Fallback
+
 
 # --- Main Execution ---
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
-    # Determine host IP - listen on all interfaces available if not root/admin
-    host_ip = '0.0.0.0' if getpass.getuser() != 'administrator' and getpass.getuser() != 'root' else get_local_ip_hostname()
-    # Use a more specific IP if needed, or 0.0.0.0 to listen on all IPv4 interfaces
+    # Determine host IP - listen on all interfaces by default
+    host_ip = '0.0.0.0'
+    local_ip_display = get_local_ip_hostname() # Get a likely accessible local IP for display
 
-    print("--- Starting LLM Commander Web Server (OOP Structure) ---")
+
+    print("--- Starting LLM Commander Web Server ---")
     print("--- SECURITY WARNING ---")
-    print("This application executes commands suggested by an LLM, potentially with sudo.")
-    print("Ensure it runs ONLY in a SECURE, TRUSTED environment.")
-    print("NEVER expose this directly to the internet without robust security.")
+    print("This application executes commands suggested by an LLM, potentially with elevated privileges.")
+    print("Ensure it runs ONLY in a SECURE, TRUSTED, ISOLATED environment.")
+    print("NEVER expose this directly to the internet or untrusted networks without robust security measures (reverse proxy, firewall, authentication).")
     print("---")
     print(f"Logging to directory: {LOGS_DIR}")
-    print(f"Flask App Secret Key is set: {'Yes' if settings['FLASK_SECRET_KEY'] else 'NO - CRITICAL SECURITY ISSUE!'}")
+    if not app.config['SECRET_KEY']:
+         print("CRITICAL SECURITY ISSUE: Flask Secret Key is NOT set!")
+    else:
+         print("Flask App Secret Key is set: Yes")
     print(f"Web UI Username: {WEB_USERNAME}")
-    print(f"Access the login page via http://<your-ip>:{port}/login or http://localhost:{port}/login")
-    print(f"Server listening on: {host_ip}:{port}")
+    print(f"Access the login page via:")
+    print(f"  - http://localhost:{port}/login")
+    if local_ip_display != '127.0.0.1':
+        print(f"  - http://{local_ip_display}:{port}/login (from other devices on the same network)")
+    print(f"Server listening on: {host_ip}:{port} (accessible from any network interface)")
     print("---")
     # Use a production WSGI server (like Gunicorn or Waitress) instead of app.run(debug=False) for deployment
     # Example with Waitress (install with pip install waitress):
-    # from waitress import serve
-    # serve(app, host=host_ip, port=port)
-    app.run(host=host_ip, port=port, debug=False) # debug=False is crucial for security
-# --- END OF FILE llm-commander/web_server.py ---
+    try:
+        from waitress import serve
+        print("Running with Waitress WSGI server.")
+        serve(app, host=host_ip, port=port, _quiet=True) # Use _quiet to reduce Waitress startup messages if desired
+    except ImportError:
+        print("Waitress not found, falling back to Flask development server.")
+        print("WARNING: Flask's development server is NOT suitable for production.")
+        app.run(host=host_ip, port=port, debug=False) # debug=False is crucial for security

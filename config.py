@@ -12,21 +12,20 @@ def load_configuration():
     """Loads configuration from environment variables."""
     load_dotenv()
 
-    config = {}
-    config['GEMINI_API_KEY'] = os.getenv("GEMINI_API_KEY")
-    config['LLM_MODEL'] = os.getenv("LLM_MODEL", "models/gemini-1.5-flash-latest")
-    config['SUDO_PASSWORD'] = os.getenv("SUDO_PASSWORD") # SECURITY RISK! Keep warning
-    # Allow SUDO_USERNAME override, though not strictly needed by pexpect currently
-    config['SUDO_USERNAME'] = os.getenv("SUDO_USERNAME") # Optional
+    config = {
+        'GEMINI_API_KEY': os.getenv("GEMINI_API_KEY"),
+        'LLM_MODEL': os.getenv("LLM_MODEL", "models/gemini-1.5-flash-latest"),
+        'SUDO_PASSWORD': os.getenv("SUDO_PASSWORD"), 'SUDO_USERNAME': os.getenv("SUDO_USERNAME"),
+        # Allow SUDO_USERNAME override, though not strictly needed by pexpect currently
+        'REQUIRE_CONFIRMATION': os.getenv("REQUIRE_CONFIRMATION", "False").strip().lower() == 'true'}
 
-    config['REQUIRE_CONFIRMATION'] = os.getenv("REQUIRE_CONFIRMATION", "False").strip().lower() == 'true'
-
+    filter_success_lines_str = "0"
     try:
-        filter_success_lines_str = os.getenv("FILTER_SUCCESS_LINES", "20")
+        filter_success_lines_str = os.getenv("FILTER_SUCCESS_LINES", "2000000")
         config['FILTER_SUCCESS_LINES'] = int(filter_success_lines_str)
     except ValueError:
-        logger.warning(f"Invalid FILTER_SUCCESS_LINES value '{filter_success_lines_str}', using default 20.")
-        config['FILTER_SUCCESS_LINES'] = 20
+        logger.warning(f"Invalid FILTER_SUCCESS_LINES value '{filter_success_lines_str}', using default 2000000.")
+        config['FILTER_SUCCESS_LINES'] = 2000000
 
     try:
         config['MAX_LLM_CALLS_PER_MINUTE'] = int(os.getenv("MAX_LLM_CALLS_PER_MINUTE", 15))
