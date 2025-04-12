@@ -186,11 +186,11 @@ def logout():
 def index():
     """Renders the main page, defaulting to the LLM Executor tab."""
     app.logger.info(f"Serving default view (LLM Executor Tab) to user: {current_user.id}")
-    # Render the llm_executor_tab.html template.
+    # Render the llm_executor.html template.
     # This template should contain {% extends "base.html" %}
     # and define the content for the {% block tab_content %}.
     # It should also have the 'active' class on its main panel div.
-    return render_template('llm_executor.html', username=current_user.id, title="LLM Task Executor")
+    return render_template('llm_executor.html', username=current_user.id, title="LLM Task Executor", active_tab="llm")
 
 # --- Optional: Route for the other tab (if direct linking is desired) ---
 # You might not need this if you solely rely on the JS tab switching,
@@ -199,11 +199,11 @@ def index():
 @login_required
 def dashboard():
     """Renders the Financial Dashboard tab."""
-    app.logger.info(f"Serving Financial Dashboard Tab to user: {current_user.id}")
-    # Render the finance_dashboard_tab.html template.
+    app.logger.info(f"Serving Dashboard Tab to user: {current_user.id}")
+    # Render the dashboard.html template.
     # This template should also extend base.html.
     # It should NOT have the 'active' class on its main panel div by default.
-    return render_template('finance_dashboard.html', username=current_user.id, title="Financial Dashboard")
+    return render_template('dashboard.html', username=current_user.id, title="Dashboard", active_tab="dashboard")
 
 
 # --- API Endpoint (No changes needed in logic) ---
