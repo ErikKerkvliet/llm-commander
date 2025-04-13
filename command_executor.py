@@ -2,6 +2,7 @@
 import logging
 import re
 import subprocess # Keep for non-interactive fallback if needed later
+import threading # Import threading for Event
 
 # Try importing pexpect, handle import error for non-Unix systems
 try:
@@ -22,6 +23,15 @@ if TYPE_CHECKING:
     from logging import Logger # Import Logger type hint
 
 
+# --- Custom Exception for Signaling User Input ---
+class UserInputRequired(Exception):
+    """Custom exception to signal that user input is needed."""
+    def __init__(self, prompt_text, prompt_type="generic"):
+        self.prompt_text = prompt_text
+        self.prompt_type = prompt_type # e.g., 'generic', 'sudo'
+        super().__init__(f"User input required ({prompt_type}): {prompt_text}")
+
+
 class CommandExecutor:
     """Executes shell commands, potentially interactively using pexpect."""
 
@@ -30,40 +40,51 @@ class CommandExecutor:
         Initializes the CommandExecutor.
 
         Args:
-            llm_client: An instance of LLMClient to handle interactive prompts.
+            llm_client: An instance of LLMClient (less used now for direct interaction).
             sudo_password: The sudo password (if available). SECURITY RISK!
         """
-        self.llm_client = llm_client
+        self.llm_client = llm_client # Keep for potential future use, but interaction flow changes
         self.sudo_password = sudo_password
         if not PEXPECT_AVAILABLE:
             error_logger.warning("'pexpect' not available. Interactive execution disabled.")
             print("WARNING: Interactive command execution is disabled because 'pexpect' is not installed.")
 
-    def execute_commands(self, commands: list[str], original_goal: str, conv_id: str, task_logger: 'Logger') -> tuple[bool, str, str]:
+    def execute_commands(self, commands: list[str], original_goal: str, conv_id: str, task_logger: 'Logger', task_state_manager: dict, task_id: str) -> tuple[bool, str, str]:
         """
-        Executes a list of commands using pexpect, handling interactive prompts via LLM.
+        Executes a list of commands using pexpect, signaling for user input via task_state_manager.
 
         Args:
             commands: A list of command strings to execute.
-            original_goal: The initial user prompt/goal (for context in interactive).
+            original_goal: The initial user prompt/goal.
             conv_id: The task ID for logging.
             task_logger: The logger instance specific to this task.
+            task_state_manager: The shared dictionary holding task states.
+            task_id: The specific ID for this task in the manager.
 
         Returns:
             A tuple containing:
             - success (bool): True if all commands executed without error, False otherwise.
             - aggregated_log (str): Combined raw stdout/stderr and interaction log for this execution block.
             - aggregated_stderr (str): Specific error messages encountered during this block.
+
+        Raises:
+            UserInputRequired: When input is needed from the user via the UI.
+            Exception: For other critical execution errors.
         """
         if not PEXPECT_AVAILABLE:
             error_msg = "Cannot execute commands interactively: pexpect library is not available."
             task_logger.error(error_msg)
             error_logger.error(f"(ConvID: {conv_id}) {error_msg}") # Also log to main error log
+            # Update state to reflect failure before returning
+            task_state_manager[task_id].update({"status": "failed", "result": {"error": error_msg}})
             return False, "", error_msg
 
         full_log = "" # Combined raw log of interaction for returning
         final_stderr = "" # Collect specific error output for returning
         overall_success = True
+        wait_event = task_state_manager[task_id].get("wait_event")
+        if not wait_event or not isinstance(wait_event, threading.Event):
+            raise ValueError(f"Task {task_id} is missing a valid threading.Event in state manager.")
 
         if not commands:
             task_logger.info("No commands provided for execution.")
@@ -86,6 +107,8 @@ class CommandExecutor:
             try:
                 # Use 'bash -c' to handle pipes, redirections etc. within the command string
                 child = pexpect.spawn('/bin/bash', ['-c', cmd], timeout=300, encoding='utf-8', echo=False)
+                # Assign child to state manager EARLY in case of immediate prompt
+                task_state_manager[task_id]['pexpect_child'] = child
 
                 patterns = [
                     pexpect.EOF,                                # 0
@@ -130,41 +153,92 @@ class CommandExecutor:
                             full_log += log_msg
 
                             if self.sudo_password:
-                                task_logger.info("Sending sudo password.")
-                                print("Sending sudo password...")
+                                task_logger.info("Sending configured sudo password.")
+                                print("Sending configured sudo password...")
                                 child.sendline(self.sudo_password)
-                                log_msg = "[RESPONSE SENT]: [sudo password]\n"
+                                log_msg = "[RESPONSE SENT]: [configured sudo password]\n"
                                 full_log += log_msg
                             else:
-                                log_msg = "[ERROR]: Sudo prompt detected, but SUDO_PASSWORD not available.\n"
-                                full_log += log_msg
-                                task_logger.error("Sudo prompt detected, but no SUDO_PASSWORD configured.")
-                                error_logger.error(f"(ConvID: {conv_id}) Sudo prompt detected, but no SUDO_PASSWORD configured.")
-                                raise ValueError("Sudo prompt detected, but SUDO_PASSWORD not set.")
+                                task_logger.warning("Sudo prompt detected, SUDO_PASSWORD not configured. Asking user via UI.")
+                                print("Sudo prompt detected, asking user via UI...")
+                                # --- Signal UI for Sudo Password ---
+                                task_state_manager[task_id].update({
+                                    "status": "awaiting_input",
+                                    "prompt_needed": True,
+                                    "prompt_text": f"Sudo password required for user:\n{prompt_context_for_log}",
+                                    "input_type": "password", # Hint for UI
+                                    "user_response": None # Clear previous response
+                                })
+                                wait_event.clear() # Ensure event is cleared before waiting
+                                task_logger.info("Waiting for user input (sudo password) via UI...")
+                                wait_event.wait() # Pause thread until UI provides input
 
-                        elif index >= 3: # Interactive prompt detected
+                                # --- Resume after UI input ---
+                                user_input = task_state_manager[task_id].get("user_response")
+                                task_state_manager[task_id].update({ # Clear prompt state
+                                     "prompt_needed": False,
+                                     "prompt_text": None,
+                                     "input_type": None,
+                                     "user_response": None
+                                })
+                                if user_input is not None: # Check if input was actually provided
+                                    task_logger.info("Received sudo password from user UI. Sending.")
+                                    print("Received sudo password from UI. Sending...")
+                                    child.sendline(user_input)
+                                    log_msg = "[RESPONSE SENT (UI - Sudo Password)]: ***\n"
+                                    full_log += log_msg
+                                else:
+                                    # This case might happen if the task is cancelled or times out while waiting
+                                    error_msg = "Failed to get sudo password from user UI (no response or cancelled)."
+                                    log_msg = f"[ERROR]: {error_msg}\n"
+                                    full_log += log_msg
+                                    task_logger.error(error_msg)
+                                    error_logger.error(f"(ConvID: {conv_id}) {error_msg}")
+                                    raise ValueError("Sudo prompt occurred, but failed to get password from user.")
+
+
+                        elif index >= 3: # Interactive prompt detected (Yes/No, Continue, Enter X, etc.)
                             task_logger.info(f"Interactive Prompt Detected: {matched_prompt_text}")
                             print(f"Interactive Prompt Detected: {matched_prompt_text}")
                             log_msg = f"[PROMPT DETECTED]:\n{prompt_context_for_log}\n"
                             full_log += log_msg
 
-                            print(f"Asking LLM for response...")
-                            try:
-                                # Pass task_logger to LLMClient method
-                                llm_answer = self.llm_client.get_llm_interactive_response(prompt_context_for_log, original_goal, conv_id, task_logger)
-                                task_logger.info(f"Sending LLM response: '{llm_answer}'")
-                                print(f"Sending LLM response: '{llm_answer}'")
-                                child.sendline(llm_answer)
-                                log_msg = f"[RESPONSE SENT (LLM)]: {llm_answer}\n"
+                            print(f"Asking user for response via UI...")
+                            # --- Signal UI for Generic Input ---
+                            task_state_manager[task_id].update({
+                                "status": "awaiting_input",
+                                "prompt_needed": True,
+                                "prompt_text": f"Input required:\n{prompt_context_for_log}",
+                                "input_type": "text", # Hint for UI
+                                "user_response": None # Clear previous response
+                            })
+                            wait_event.clear() # Ensure event is cleared before waiting
+                            task_logger.info("Waiting for user input (interactive prompt) via UI...")
+                            wait_event.wait() # Pause thread
+
+                            # --- Resume after UI input ---
+                            user_input = task_state_manager[task_id].get("user_response")
+                            task_state_manager[task_id].update({ # Clear prompt state
+                                 "prompt_needed": False,
+                                 "prompt_text": None,
+                                 "input_type": None,
+                                 "user_response": None
+                            })
+
+                            if user_input is not None:
+                                task_logger.info(f"Received response from user UI: '{user_input}'. Sending.")
+                                print(f"Received response from UI: '{user_input}'. Sending...")
+                                child.sendline(user_input)
+                                log_msg = f"[RESPONSE SENT (UI)]: {user_input}\n"
                                 full_log += log_msg
-                            except Exception as llm_err:
-                                error_msg = f"Failed to get/send LLM response for interactive prompt: {llm_err}"
+                            else:
+                                error_msg = "Failed to get interactive response from user UI (no response or cancelled)."
                                 log_msg = f"[ERROR]: {error_msg}\n"
                                 full_log += log_msg
-                                task_logger.error(f"LLM Interactive Response Error: {llm_err}", exc_info=True)
-                                error_logger.error(f"(ConvID: {conv_id}) LLM Interactive Response Error: {llm_err}", exc_info=True)
-                                # Raise to break the command execution loop
-                                raise RuntimeError(error_msg) from llm_err
+                                task_logger.error(error_msg)
+                                error_logger.error(f"(ConvID: {conv_id}) {error_msg}")
+                                raise RuntimeError(f"Failed to get interactive response from user UI for prompt: {prompt_context_for_log}")
+
 
                         # Continue interaction loop
 
@@ -221,6 +295,10 @@ class CommandExecutor:
                         # Ensure graceful close if possible
                         if not child.closed:
                            child.close()
+                        # Remove child from state manager after it's closed
+                        if task_state_manager[task_id].get('pexpect_child') == child:
+                            task_state_manager[task_id]['pexpect_child'] = None
+
 
                 # Check exit/signal status *after* closing
                 exit_status = child.exitstatus
@@ -234,7 +312,8 @@ class CommandExecutor:
                     final_stderr += error_msg + "\n"
                     task_logger.error(f"Command failed: $ {cmd} - Exit Status: {exit_status}")
                     error_logger.error(f"(ConvID: {conv_id}) Command failed: $ {cmd} - Exit Status: {exit_status}")
-                    break # Stop processing further commands in this attempt
+                    # Don't break here in the executor; let llm_commander decide based on overall_success
+                    # break # Stop processing further commands in this attempt
 
                 elif signal_status is not None:
                     overall_success = False
@@ -243,7 +322,8 @@ class CommandExecutor:
                     final_stderr += error_msg + "\n"
                     task_logger.error(f"Command failed: $ {cmd} - Terminated by Signal: {signal_status}")
                     error_logger.error(f"(ConvID: {conv_id}) Command failed: $ {cmd} - Terminated by Signal: {signal_status}")
-                    break # Stop processing further commands
+                    # Don't break here in the executor
+                    # break # Stop processing further commands
 
             except Exception as spawn_err:
                 # Catch errors during pexpect.spawn or outside the inner loop
@@ -255,9 +335,13 @@ class CommandExecutor:
                 error_logger.error(f"(ConvID: {conv_id}) Outer Execution Error for command: $ {cmd} - Error: {spawn_err}", exc_info=True)
                 if child and not child.closed:
                     child.close(force=True) # Ensure child is closed
-                break # Stop processing further commands
+                # Remove child from state manager on critical error
+                if 'pexpect_child' in task_state_manager[task_id]:
+                    task_state_manager[task_id]['pexpect_child'] = None
+                # Let llm_commander handle the overall failure
+                # break # Stop processing further commands
 
-            # Break outer command loop if a failure occurred for this command
+            # If *this specific command* failed, we stop executing the rest in the list for this attempt.
             if not overall_success:
                 task_logger.warning(f"Execution block terminated early due to failure in command: $ {cmd}")
                 break
