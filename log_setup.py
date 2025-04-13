@@ -43,7 +43,7 @@ def setup_loggers():
             logging.critical(f"CRITICAL: Failed to set up file error logging: {e}", exc_info=True)
             error_logger = logging.getLogger() # Use root logger as fallback
 
-    # Conversation logging is now handled dynamically in LLMCommanderApp
+    # Task logging is now handled dynamically in LLMCommanderApp
     # We only return the configured error logger here.
     return error_logger
 

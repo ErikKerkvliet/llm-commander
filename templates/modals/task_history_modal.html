@@ -1,0 +1,64 @@
+<!-- START OF FILE: templates/modals/task_history_modal.html -->
+
+<!-- Task History Modal -->
+<div class="modal fade" id="taskHistoryModal" tabindex="-1" aria-labelledby="taskHistoryModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable"> {# Large and scrollable modal #}
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="taskHistoryModalLabel">Previous Task History</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        {# Check if task_history exists and has items #}
+        {# This fragment inherits variables from the template that includes it (dashboard.html) #}
+        {% if task_history and task_history|length > 0 %}
+            <ul class="list-group">
+                {% for task in task_history %}
+                    <li class="list-group-item">
+                        {# Task ID and Status on one line #}
+                        <div class="d-flex w-100 justify-content-between mb-2">
+                            <h6 class="mb-0">Task ID: <code class="user-select-all">{{ task.id | default('N/A') }}</code></h6>
+                            {# Status Badges #}
+                           {% if task.status == 'Success' %}
+                               <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Success</span>
+                           {% elif task.status == 'Failure' %}
+                               <span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Failure</span>
+                           {% elif task.status == 'Cancelled' %}
+                                <span class="badge bg-warning text-dark"><i class="fas fa-ban me-1"></i>Cancelled</span>
+                           {% else %}
+                               <span class="badge bg-secondary"><i class="fas fa-question-circle me-1"></i>{{ task.status | default('Unknown') }}</span>
+                           {% endif %}
+                        </div>
+
+                        {# Prompt #}
+                        <p class="mb-1"><strong>Initial Prompt:</strong></p>
+                        <blockquote class="blockquote blockquote-sm bg-light p-2 rounded mb-2">
+                           <small>{{ task.prompt | default('No prompt recorded') | truncate(250) }}</small> {# Truncate long prompts #}
+                        </blockquote>
+
+                        {# Timestamp #}
+                        <p class="mb-0"><small class="text-muted">Timestamp: {{ task.timestamp | default('N/A') }}</small></p>
+
+                        {# Optional: Link to detailed logs if path is available #}
+                        {# {% if task.log_path %}
+                        # <a href="/logs/{{ task.log_path }}" target="_blank" class="btn btn-sm btn-outline-secondary mt-2">View Detail Log</a>
+                        # {% endif %} #}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            {# Message when no history is found #}
+            <div class="alert alert-info" role="alert">
+              No previous task history found or provided.
+            </div>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- End Task History Modal -->
+
+<!-- END OF FILE: templates/modals/task_history_modal.html -->

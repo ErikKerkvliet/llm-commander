@@ -17,7 +17,7 @@ class LLMCommanderApp:
     """
     Main application class for LLM Commander.
     Orchestrates getting commands from LLM, executing them, handling retries,
-    and filtering output. Manages dynamic conversation logging.
+    and filtering output. Manages dynamic task logging.
     """
 
     def __init__(self):
@@ -47,9 +47,9 @@ class LLMCommanderApp:
         print(f"--- Output filter will keep last {self.config['FILTER_SUCCESS_LINES']} lines on success ---")
 
     def _setup_task_logging(self, conv_id: str) -> tuple[logging.Logger, str, logging.FileHandler]:
-        """Sets up logging handlers for a specific conversation task."""
+        """Sets up logging handlers for a specific task."""
         now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        conv_log_dir = os.path.join(self.logs_base_dir, 'conversations', f"{now_str}_{conv_id}")
+        conv_log_dir = os.path.join(self.logs_base_dir, 'tasks', f"{now_str}_{conv_id}")
         os.makedirs(conv_log_dir, exist_ok=True)
 
         task_logger_name = f'TaskLogger_{conv_id}'
@@ -63,8 +63,8 @@ class LLMCommanderApp:
              handler = next((h for h in task_logger.handlers if isinstance(h, logging.FileHandler) and task_logger_name in h.name), None)
              return task_logger, conv_log_dir, handler
 
-        # Create and add file handler for conversation.log
-        conv_log_file = os.path.join(conv_log_dir, 'conversation.log')
+        # Create and add file handler for task.log
+        conv_log_file = os.path.join(conv_log_dir, 'task.log')
         handler = logging.FileHandler(conv_log_file, encoding='utf-8')
         handler.setLevel(logging.INFO)
         # Formatter doesn't need conv_id anymore, it's implicit in the file path
@@ -193,7 +193,7 @@ class LLMCommanderApp:
                             attempt_data["stdout"] = filtered_log_output # Store filtered version
                             attempt_data["stderr"] = error_output # Keep stderr raw
 
-                            # Log filtered output summary to conversation log
+                            # Log filtered output summary to task log
                             task_logger.info(f"Execution Result (Attempt {attempt+1}): Success={exec_success}")
                             if filtered_log_output:
                                 task_logger.info(f"Execution Log Summary (stdout/filtered):\n{filtered_log_output}")

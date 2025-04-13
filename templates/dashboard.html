@@ -1,41 +1,59 @@
+<!-- START OF FILE: templates/dashboard.html -->
 {% extends "base.html" %}
 
+{% block title %}{{ title or "Dashboard" }}{% endblock %}
+
 {% block tab_content %}
-<!-- Dashboard Tab Panel -->
-<div id="tab-dashboard" class="tab-panel">
-    <h1>Dashboard</h1>
-    <p>Overview of key metrics and performance.</p>
+<!-- Dashboard Content Area -->
+<div id="dashboard-panel" class="tab-pane fade {% if active_tab == 'dashboard' %}show active{% endif %}" role="tabpanel" aria-labelledby="dashboard-tab">
+    <h2 class="mt-3 mb-3">Task Dashboard</h2>
+    <hr>
 
-    <div class="dashboard-widgets">
-        <div class="widget">
-            <h3>Total Revenue (MTD)</h3>
-            <div class="value positive">$12,580.50</div>
-            <div class="change">+5.2% vs last month</div>
+    <div class="row">
+        <!-- Current Focus Card -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <i class="fas fa-crosshairs me-2"></i>Current Focus
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">Main Task</h5>
+                    <p class="card-text text-muted">{{ main_task or "No main task currently active." }}</p>
+
+                    <h5 class="card-title mt-4">Current Task</h5>
+                    <p class="card-text text-muted">{{ current_task or "Awaiting next step or task start." }}</p>
+                </div>
+            </div>
         </div>
-        <div class="widget">
-            <h3>Expenses (MTD)</h3>
-            <div class="value negative">$6,120.75</div>
-            <div class="change">-1.8% vs last month</div>
-        </div>
-        <div class="widget">
-            <h3>Net Profit (MTD)</h3>
-            <div class="value positive">$6,459.75</div>
-            <div class="change">+11.5% vs last month</div>
-        </div>
-         <div class="widget">
-            <h3>Account Balance</h3>
-            <div class="value">$88,234.10</div>
-            <div class="change">As of today</div>
+
+        <!-- History & Actions Card -->
+        <div class="col-md-6 mb-4">
+             <div class="card h-100">
+                <div class="card-header">
+                     <i class="fas fa-history me-2"></i>History & Actions
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">Task History</h5>
+                    <p class="card-text">Review previously executed tasks and their outcomes.</p>
+                    <!-- Button to trigger modal (MUST STAY HERE) -->
+                    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#taskHistoryModal">
+                        <i class="fas fa-list-alt me-2"></i>View Task History
+                    </button>
+                    {# Add other actions/buttons here if needed in the future #}
+                </div>
+                 <div class="card-footer text-muted">
+                    <small>Detailed logs are in the <code>logs/tasks/</code> directory.</small>
+                 </div>
+            </div>
         </div>
     </div>
 
-    <div class="placeholder-chart">
-        Placeholder for Monthly Performance Chart
-    </div>
+    {# You could add more rows/cards for other dashboard elements #}
 
-     <div class="placeholder-chart" style="margin-top: 20px;">
-        Placeholder for Expense Category Breakdown
-    </div>
+</div> <!-- End of dashboard-panel -->
 
-</div> <!-- End Dashboard Tab Panel -->
+<!-- *** Include the Modal HTML from the separate file *** -->
+{% include 'modals/task_history_modal.html' %}
+
 {% endblock %}
+<!-- END OF FILE: templates/dashboard.html -->

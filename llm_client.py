@@ -66,7 +66,7 @@ class LLMClient:
 
         Args:
             prompt_text: The user request or context.
-            conv_id: The conversation ID.
+            conv_id: The task ID.
             task_logger: The logger instance specific to this task.
 
         Returns:
@@ -82,7 +82,7 @@ class LLMClient:
         system_prompt = """
 You are an expert system administrator AI assistant. Your ONLY task is to translate user requests or error messages into a sequence of shell commands runnable on a Linux-based system.
 Respond ONLY with a valid JSON object containing a single key "commands". The value of "commands" MUST be a list of strings. Each string is a single shell command to be executed in sequence.
-Do NOT include any explanations, apologies, conversational text, markdown formatting, or anything other than the JSON object.
+Do NOT include any explanations, apologies, task text, markdown formatting, or anything other than the JSON object.
 If you cannot determine appropriate commands or the request is unclear/unsafe, respond with: {"commands": []}
 """
         full_prompt = f"{system_prompt}\n\nUser Request/Error:\n{prompt_text}"
@@ -147,7 +147,7 @@ If you cannot determine appropriate commands or the request is unclear/unsafe, r
         Args:
             prompt_context: The text context around the interactive prompt.
             original_goal: The initial task goal.
-            conv_id: The conversation ID.
+            conv_id: The task ID.
             task_logger: The logger instance specific to this task.
 
         Returns:

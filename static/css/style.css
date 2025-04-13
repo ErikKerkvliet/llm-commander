@@ -1,0 +1,150 @@
+/* --- Base & Navbar Styles --- */
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 0; background-color: #f8f9fa; color: #212529; }
+.navbar { background-color: #343a40; padding: 10px 20px; color: white; display: flex; justify-content: space-between; align-items: center; }
+.navbar .brand { font-size: 1.2em; font-weight: bold; }
+.navbar .user-info a { color: #dc3545; text-decoration: none; margin-left: 15px; font-weight: bold; }
+.navbar .user-info a:hover { text-decoration: underline; }
+.container { max-width: 900px; margin: 30px auto; background: #fff; padding: 0; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.07); }
+
+/* --- Tab Styles --- */
+.tab-buttons { border-bottom: 2px solid #dee2e6; margin-bottom: 0; padding: 15px 30px 0 30px; display: flex; background-color: #fff; border-radius: 8px 8px 0 0; }
+/* Style links like buttons */
+.tab-link {
+    display: inline-block; /* Treat like a button */
+    background-color: #f8f9fa;
+    border: 2px solid #dee2e6;
+    border-bottom: none;
+    padding: 12px 25px;
+    cursor: pointer;
+    margin-right: 5px;
+    margin-bottom: -2px;
+    border-radius: 5px 5px 0 0;
+    font-size: 1.1em;
+    font-weight: 500;
+    color: #495057;
+    transition: background-color 0.2s, color 0.2s;
+    outline: none;
+    position: relative;
+    text-decoration: none; /* Remove underline from link */
+}
+.tab-link:hover { background-color: #e9ecef; color: #212529; text-decoration: none; }
+.tab-link.active { background-color: #ffffff; border-color: #dee2e6 #dee2e6 #ffffff; color: #007bff; font-weight: bold; z-index: 1; }
+/* Content area */
+.tab-content { padding: 30px; background-color: #ffffff; border-radius: 0 0 8px 8px; }
+/* No need for tab-panel display none/block here as only one is rendered */
+
+/* --- Content Styles --- */
+.tab-content h1 { color: #343a40; border-bottom: 2px solid #dee2e6; padding-bottom: 10px; margin-top: 0; margin-bottom: 20px; }
+.tab-content h2 { color: #495057; margin-top: 25px; }
+.tab-content h3 { color: #6c757d; margin-top: 20px; margin-bottom: 10px; font-size: 1.1em; }
+label { display: block; margin-bottom: 8px; font-weight: 600; color: #495057; }
+textarea { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ced4da; border-radius: 4px; min-height: 120px; resize: vertical; box-sizing: border-box; font-size: 1em; }
+textarea:focus { border-color: #80bdff; outline: 0; box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); }
+input[type="number"] { width: 70px; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; margin-left: 10px; }
+button[type="submit"] { background-color: #28a745; color: white; padding: 12px 25px; border: none; border-radius: 4px; cursor: pointer; font-size: 1.1em; font-weight: bold; transition: background-color 0.2s; }
+button[type="submit"]:hover { background-color: #218838; }
+button[type="submit"]:disabled { background-color: #6c757d; cursor: not-allowed; }
+#status { margin-top: 20px; font-weight: bold; padding: 12px; border-radius: 4px; display: none; }
+.status-loading { background-color: #ffc107; color: #343a40; border: 1px solid #ffeeba; display: block !important; }
+.status-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; display: block !important; }
+.status-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; display: block !important; }
+#results { margin-top: 25px; background-color: #f8f9fa; padding: 20px; border-radius: 4px; border: 1px solid #dee2e6; max-height: 600px; overflow-y: auto; font-size: 0.9em; }
+#results h2 { border-bottom: 1px solid #ced4da; padding-bottom: 5px; font-size: 1.3em; margin-top: 0; }
+.attempt { border: 1px solid #e9ecef; background-color: #ffffff; border-radius: 5px; margin-bottom: 20px; padding: 15px; }
+.attempt:last-child { margin-bottom: 0; }
+.attempt p { margin-top: 0; margin-bottom: 8px; }
+pre { background-color: #e9ecef; color: #212529; padding: 10px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 0.95em; border: 1px solid #ced4da; }
+pre.stderr { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
+.warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+.warning strong { font-weight: bold; }
+
+/* --- Dummy Dashboard Styles --- (These should ideally be in dashboard.html or a dashboard-specific CSS) */
+/* --- UPDATE: Moved Bootstrap-dependent styles from dashboard.html here --- */
+/* Card styles (if you want to use them outside dashboard too) */
+.card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    word-wrap: break-word;
+    background-color: #fff;
+    background-clip: border-box;
+    border: 1px solid rgba(0,0,0,.125);
+    border-radius: .25rem;
+}
+.card-header { padding: .5rem 1rem; margin-bottom: 0; background-color: rgba(0,0,0,.03); border-bottom: 1px solid rgba(0,0,0,.125); }
+.card-body { flex: 1 1 auto; padding: 1rem 1rem; }
+.card-title { margin-bottom: .5rem; }
+.card-text:last-child { margin-bottom: 0; }
+.card-footer { padding: .5rem 1rem; background-color: rgba(0,0,0,.03); border-top: 1px solid rgba(0,0,0,.125); }
+
+/* Alert styles (if used outside dashboard) */
+.alert { position: relative; padding: 1rem 1rem; margin-bottom: 1rem; border: 1px solid transparent; border-radius: .25rem; }
+.alert-info { color: #0c5460; background-color: #d1ecf1; border-color: #bee5eb; }
+
+/* Badge styles */
+.badge { display: inline-block; padding: .35em .65em; font-size: .75em; font-weight: 700; line-height: 1; color: #fff; text-align: center; white-space: nowrap; vertical-align: baseline; border-radius: .25rem; }
+.bg-success { background-color: #198754 !important; }
+.bg-danger { background-color: #dc3545 !important; }
+.bg-warning { background-color: #ffc107 !important; }
+.text-dark { color: #212529 !important; }
+.bg-secondary { background-color: #6c757d !important; }
+
+/* List group styles */
+.list-group { display: flex; flex-direction: column; padding-left: 0; margin-bottom: 0; border-radius: .25rem; }
+.list-group-item { position: relative; display: block; padding: .5rem 1rem; color: #212529; text-decoration: none; background-color: #fff; border: 1px solid rgba(0,0,0,.125); }
+.list-group-item:first-child { border-top-left-radius: inherit; border-top-right-radius: inherit; }
+.list-group-item:last-child { border-bottom-right-radius: inherit; border-bottom-left-radius: inherit; }
+.list-group-item + .list-group-item { border-top-width: 0; }
+
+/* Utility classes used in dashboard.html */
+.mt-3 { margin-top: 1rem !important; }
+.mb-3 { margin-bottom: 1rem !important; }
+.mb-4 { margin-bottom: 1.5rem !important; }
+.mb-2 { margin-bottom: .5rem !important; }
+.mb-1 { margin-bottom: .25rem !important; }
+.mb-0 { margin-bottom: 0 !important; }
+.me-2 { margin-right: .5rem !important; }
+.me-1 { margin-right: .25rem !important; }
+.p-2 { padding: .5rem !important; }
+.h-100 { height: 100% !important; }
+.w-100 { width: 100% !important; }
+.d-flex { display: flex !important; }
+.justify-content-between { justify-content: space-between !important; }
+.text-muted { color: #6c757d !important; }
+.text-center { text-align: center !important; }
+.rounded { border-radius: .25rem !important; }
+.bg-light { background-color: #f8f9fa !important; }
+.user-select-all { user-select: all !important; }
+
+/* Styles for Modal - these are essential */
+.modal { position: fixed; top: 0; left: 0; z-index: 1055; display: none; width: 100%; height: 100%; overflow-x: hidden; overflow-y: auto; outline: 0; }
+.modal.fade .modal-dialog { transition: transform .3s ease-out; transform: translate(0,-50px); }
+@media (prefers-reduced-motion:reduce) { .modal.fade .modal-dialog { transition: none; } }
+.modal.show .modal-dialog { transform: none; }
+.modal-dialog { position: relative; width: auto; margin: .5rem; pointer-events: none; }
+.modal.fade .modal-dialog { transition: transform .3s ease-out; transform: translate(0,-50px); }
+@media (min-width: 576px) { .modal-dialog { max-width: 500px; margin: 1.75rem auto; } }
+/* Make modal scrollable */
+.modal-dialog-scrollable { height: calc(100% - 1rem); }
+.modal-dialog-scrollable .modal-content { max-height: 100%; overflow: hidden; }
+.modal-dialog-scrollable .modal-body { overflow-y: auto; }
+@media (min-width: 992px) { .modal-lg, .modal-xl { max-width: 800px; } } /* Modal Large Size */
+.modal-content { position: relative; display: flex; flex-direction: column; width: 100%; pointer-events: auto; background-color: #fff; background-clip: padding-box; border: 1px solid rgba(0,0,0,.2); border-radius: .3rem; outline: 0; }
+.modal-header { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; padding: 1rem 1rem; border-bottom: 1px solid #dee2e6; border-top-left-radius: calc(.3rem - 1px); border-top-right-radius: calc(.3rem - 1px); }
+.modal-header .btn-close { padding: .5rem .5rem; margin: -.5rem -.5rem -.5rem auto; }
+.btn-close { box-sizing: content-box; width: 1em; height: 1em; padding: .25em .25em; color: #000; background: transparent url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23000'%3e%3cpath d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z'/%3e%3c/svg%3e") center/1em auto no-repeat; border: 0; border-radius: .25rem; opacity: .5; }
+.btn-close:hover { color: #000; text-decoration: none; opacity: .75; }
+.modal-title { margin-bottom: 0; line-height: 1.5; }
+.modal-body { position: relative; flex: 1 1 auto; padding: 1rem; }
+.modal-footer { display: flex; flex-wrap: wrap; flex-shrink: 0; align-items: center; justify-content: flex-end; padding: .75rem; border-top: 1px solid #dee2e6; border-bottom-right-radius: calc(.3rem - 1px); border-bottom-left-radius: calc(.3rem - 1px); }
+.modal-footer > * { margin: .25rem; }
+
+/* Button styles (since bootstrap css wasn't loaded before) */
+.btn { display: inline-block; font-weight: 400; line-height: 1.5; color: #212529; text-align: center; text-decoration: none; vertical-align: middle; cursor: pointer; -webkit-user-select: none; -moz-user-select: none; user-select: none; background-color: transparent; border: 1px solid transparent; padding: .375rem .75rem; font-size: 1rem; border-radius: .25rem; transition: color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out; }
+.btn-info { color: #fff; background-color: #0dcaf0; border-color: #0dcaf0; }
+.btn-info:hover { color: #fff; background-color: #31d2f2; border-color: #25cff2;}
+.btn-secondary { color: #fff; background-color: #6c757d; border-color: #6c757d; }
+.btn-secondary:hover { color: #fff; background-color: #5c636a; border-color: #565e64; }
+.btn-outline-primary { color: #0d6efd; border-color: #0d6efd; }
+.btn-outline-primary:hover { color: #fff; background-color: #0d6efd; border-color: #0d6efd; }

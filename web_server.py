@@ -198,13 +198,28 @@ def index():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    """Renders the Financial Dashboard tab."""
-    app.logger.info(f"Serving Dashboard Tab to user: {current_user.id}")
-    # Render the dashboard.html template.
-    # This template should also extend base.html.
-    # It should NOT have the 'active' class on its main panel div by default.
-    return render_template('dashboard.html', username=current_user.id, title="Dashboard", active_tab="dashboard")
+    # --- Placeholder logic to get task data ---
+    # This would involve reading logs, querying a database, or accessing some state
+    current_main_task = "Example: Deploy web application"
+    current_step = "Example: Waiting for user confirmation"
+    history_data = [
+        {'id': 'conv_abc_123', 'prompt': 'Install nginx', 'status': 'Success', 'timestamp': '2023-10-27 10:00:00'},
+        {'id': 'conv_def_456', 'prompt': 'Configure firewall rules', 'status': 'Failure', 'timestamp': '2023-10-27 10:05:00'},
+        {'id': 'conv_ghi_789', 'prompt': 'Update all packages', 'status': 'Cancelled', 'timestamp': '2023-10-27 10:10:00'},
+        # ... more tasks
+    ]
+    # --- End Placeholder logic ---
 
+    app.logger.info(f"Serving Dashboard Tab to user: {current_user.id}")
+    return render_template(
+        'dashboard.html',
+        username=current_user.id,
+        title="Dashboard",
+        active_tab="dashboard",
+        main_task=current_main_task,              # Pass main task
+        current_task=current_step,    # Pass current step
+        task_history=history_data                     # Pass history list
+    )
 
 # --- API Endpoint (No changes needed in logic) ---
 @app.route('/execute', methods=['POST']) # Only POST for execution
@@ -241,7 +256,7 @@ def handle_execute():
 
     try:
         # --- Call the main application logic ---
-        # This call now handles its own detailed logging to conversation files
+        # This call now handles its own detailed logging to task files
         success, results = llm_commander_app.process_task(initial_prompt, max_retries)
         # --- ---
 

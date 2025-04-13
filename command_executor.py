@@ -46,7 +46,7 @@ class CommandExecutor:
         Args:
             commands: A list of command strings to execute.
             original_goal: The initial user prompt/goal (for context in interactive).
-            conv_id: The conversation ID for logging.
+            conv_id: The task ID for logging.
             task_logger: The logger instance specific to this task.
 
         Returns:

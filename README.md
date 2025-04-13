@@ -89,8 +89,8 @@
 9.  **Logs:**
     *   **General Errors:** Check `logs/error.log` for application-level errors (configuration, LLM API issues, critical failures).
     *   **Web Server Activity:** Check `logs/web_server.log` for Flask request/response logs and web-specific errors.
-    *   **Task-Specific Logs:** For each task submitted via the web UI, a new directory is created under `logs/conversations/` named like `YYYY-MM-DD_HH-MM-SS_{uuid}`. Inside this directory:
-        *   `conversation.log`: Contains the detailed step-by-step history of the LLM interactions (prompts, responses), execution flow control messages, and confirmation steps for that specific task.
+    *   **Task-Specific Logs:** For each task submitted via the web UI, a new directory is created under `logs/tasks/` named like `YYYY-MM-DD_HH-MM-SS_{uuid}`. Inside this directory:
+        *   `task.log`: Contains the detailed step-by-step history of the LLM interactions (prompts, responses), execution flow control messages, and confirmation steps for that specific task.
         *   `output.log`: Contains the **raw, unfiltered** standard output (stdout), standard error (stderr), and interactive prompt/response details captured during the execution of the shell commands for that task.
 10. **Logout:** Use the "Logout" link in the top right of the main page.
 
@@ -116,7 +116,7 @@
     *   Configure `sudoers` for passwordless execution of *only* the specific, necessary commands (more secure but requires careful setup).
     *   *Do not store the password* and accept that commands requiring it will likely fail interactive prompts (unless `pexpect` handles the OS-level graphical prompt, which is unlikely).
 *   **Network Exposure:** Do not expose the raw Flask server (port 5000 or other) directly to the internet. Always place it behind a firewall and preferably access it via a VPN or a properly configured reverse proxy.
-*   **Interactive Prompt Automation:** Automatically answering prompts based on LLM suggestions is inherently risky. The LLM may misunderstand context or provide dangerous responses (e.g., confirming destructive actions like `rm -rf /`). The `conversation.log` and `output.log` files are critical for auditing these interactions.
+*   **Interactive Prompt Automation:** Automatically answering prompts based on LLM suggestions is inherently risky. The LLM may misunderstand context or provide dangerous responses (e.g., confirming destructive actions like `rm -rf /`). The `task.log` and `output.log` files are critical for auditing these interactions.
 *   **Rate Limiting:** The current rate limiting is client-side and basic. Implement server-side rate limiting (e.g., using Flask-Limiter) for better protection against abuse if exposed.
 *   **Dependencies:** Keep all dependencies up-to-date to patch potential security vulnerabilities (`pip list --outdated`, `pip install -U <package>`).
 *   **Logging:** Sensitive information (like parts of commands or output) might be logged. Secure the `logs/` directory appropriately (e.g., restrict file permissions).
