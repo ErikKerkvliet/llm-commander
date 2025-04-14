@@ -7,69 +7,21 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                {% if task_history %}
-                    <div class="list-group">
-                        {% for task in task_history %}
-                            <div class="list-group-item list-group-item-action flex-column align-items-start mb-2 shadow-sm">
-                                <div class="d-flex w-100 justify-content-between mb-2">
-                                    {# Task ID #}
-                                    <h6 class="mb-0 text-break">Task ID: <code class="user-select-all text-danger">{{ task.id | default('N/A') }}</code></h6>
-                                    {# Status Badges - Using lowercase comparison #}
-                                    <div> {# Wrap badges and button #}
-                                        {% set status_lower = task.status | lower if task.status else 'unknown' %}
-                                        {% if 'success' in status_lower or 'complete' in status_lower %}
-                                            <span class="badge bg-success me-2"><i class="fas fa-check-circle me-1"></i>{{ task.status | default('Success') }}</span>
-                                        {% elif 'fail' in status_lower or 'error' in status_lower %}
-                                            <span class="badge bg-danger me-2"><i class="fas fa-times-circle me-1"></i>{{ task.status | default('Failure') }}</span>
-                                        {% elif 'cancel' in status_lower %}
-                                            <span class="badge bg-warning text-dark me-2"><i class="fas fa-ban me-1"></i>{{ task.status | default('Cancelled') }}</span>
-                                        {% elif 'incomplete' in status_lower %}
-                                            <span class="badge bg-secondary me-2"><i class="fas fa-exclamation-circle me-1"></i>{{ task.status | default('Incomplete') }}</span>
-                                        {% else %}
-                                            <span class="badge bg-info me-2"><i class="fas fa-question-circle me-1"></i>{{ task.status | default('Unknown') }}</span>
-                                        {% endif %}
+                <!-- Container for dynamic content -->
+                <div id="taskHistoryListContainer" class="list-group">
+                    <!-- Loading Indicator -->
+                    <p id="historyLoadingIndicator" class="text-center text-muted">
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        Loading history...
+                    </p>
+                    <!-- Error Message Area -->
+                    <p id="historyError" class="text-danger text-center" style="display: none;"></p>
+                    <!-- History items will be inserted here by JavaScript -->
+                </div>
 
-                                        {# --- NEW: View Output Button --- #}
-                                        <button type="button" class="btn btn-sm btn-outline-info view-output-log"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#outputLogModal"
-                                                data-task-id="{{ task.id | e }}"> {# Use 'e' filter for HTML attribute safety #}
-                                            <i class="fas fa-file-alt me-1"></i> Output
-                                        </button>
-                                        {# --- END NEW --- #}
-                                    </div>
-                                </div>
-                                <p class="mb-1"><strong>Initial Prompt:</strong> {{ task.prompt | default('N/A') }}</p>
-                                {# Display commands only if needed/desired
-                                {% if task.commands %}
-                                    <div class="mb-1">
-                                        <strong>Commands Attempted:</strong>
-                                        <ul class="list-unstyled ms-3 small">
-                                            {% for cmd in task.commands %}
-                                                <li><code>{{ cmd }}</code></li>
-                                            {% else %}
-                                                <li><em>No commands found or parsed.</em></li>
-                                            {% endfor %}
-                                        </ul>
-                                    </div>
-                                {% else %}
-                                    <p class="mb-1 small"><em>No commands found or parsed.</em></p>
-                                {% endif %}
-                                #}
-                                <small class="text-muted">
-                                    Timestamp:
-                                    {% if task.timestamp %}
-                                        {{ task.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}
-                                    {% else %}
-                                        Timestamp unavailable
-                                    {% endif %}
-                                </small>
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <p class="text-muted">No task history found.</p>
-                {% endif %}
+                <!-- REMOVED Jinja loop -->
+                <!-- {% if task_history %} ... {% else %} ... {% endif %} -->
+
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -78,21 +30,165 @@
     </div>
 </div>
 
-{# --- NEW: Output Log Modal Structure (Place AFTER the history modal) --- #}
-<div class="modal fade" id="outputLogModal" tabindex="-1" aria-labelledby="outputLogModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false"> {# Static backdrop prevents closing on click outside #}
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="outputLogModalLabel">Output Log for Task: <code class="user-select-all text-danger" id="outputLogTaskId">...</code></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body bg-light"> {# Light background for contrast #}
-                <pre><code id="outputLogContent" style="white-space: pre-wrap; word-wrap: break-word; font-size: 0.85em;">Loading log content...</code></pre>
-            </div>
-            <div class="modal-footer">
-                 <span id="outputLogError" class="text-danger me-auto"></span> {# Area for error messages #}
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- Include the Output Log Modal HTML -->
+{% include 'modals/task_output_modal.html' %}
+
+<!-- JavaScript for Task History Loading (can be moved to a separate file) -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const historyModalElement = document.getElementById('taskHistoryModal');
+    if (!historyModalElement) {
+        console.error("Task History Modal element not found!");
+        return;
+    }
+
+    const listContainer = document.getElementById('taskHistoryListContainer');
+    const loadingIndicator = document.getElementById('historyLoadingIndicator');
+    const errorDisplay = document.getElementById('historyError');
+
+    // --- Helper to create status badge ---
+    function createStatusBadge(status) {
+        const badge = document.createElement('span');
+        badge.classList.add('badge', 'me-2');
+        const icon = document.createElement('i');
+        icon.classList.add('fas', 'me-1');
+
+        let statusText = status || 'Unknown';
+        let statusLower = statusText.toLowerCase();
+
+        if (statusLower.includes('success') || statusLower.includes('complete')) {
+            badge.classList.add('bg-success');
+            icon.classList.add('fa-check-circle');
+        } else if (statusLower.includes('fail') || statusLower.includes('error')) {
+            badge.classList.add('bg-danger');
+            icon.classList.add('fa-times-circle');
+             // Override text for internal loading errors
+             if (statusLower === 'error loading log') statusText = 'Load Error';
+        } else if (statusLower.includes('cancel')) {
+            badge.classList.add('bg-warning', 'text-dark');
+            icon.classList.add('fa-ban');
+        } else if (statusLower.includes('incomplete')) {
+            badge.classList.add('bg-secondary');
+            icon.classList.add('fa-exclamation-circle');
+        } else {
+            badge.classList.add('bg-info');
+            icon.classList.add('fa-question-circle');
+        }
+
+        badge.appendChild(icon);
+        badge.appendChild(document.createTextNode(statusText.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()))); // Capitalize
+        return badge;
+    }
+
+    // --- Helper to format timestamp ---
+    function formatTimestamp(isoString) {
+        if (!isoString) return 'Timestamp unavailable';
+        try {
+            const date = new Date(isoString);
+            // Basic formatting, adjust as needed (e.g., using libraries like moment.js/date-fns for better control)
+            return date.toLocaleString(undefined, {
+                 year: 'numeric', month: 'short', day: 'numeric',
+                 hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+        } catch (e) {
+            console.warn("Error formatting timestamp:", isoString, e);
+            return 'Invalid Date';
+        }
+    }
+
+    historyModalElement.addEventListener('show.bs.modal', async function (event) {
+        // Clear previous state
+        listContainer.innerHTML = ''; // Clear previous items
+        errorDisplay.style.display = 'none';
+        errorDisplay.textContent = '';
+        loadingIndicator.style.display = 'block'; // Show loading indicator
+        listContainer.appendChild(loadingIndicator); // Add indicator back
+
+        try {
+            const response = await fetch('/task_history_data'); // Fetch from the new endpoint
+
+            if (!response.ok) {
+                let errorMsg = `Failed to load history: ${response.status} ${response.statusText}`;
+                try {
+                    const errData = await response.json();
+                    if (errData && errData.error) errorMsg = errData.error;
+                } catch (e) { /* ignore if body isn't json */ }
+                throw new Error(errorMsg);
+            }
+
+            const historyData = await response.json();
+
+            // Clear loading indicator once data is fetched (before processing)
+            loadingIndicator.remove();
+
+            if (!historyData || historyData.length === 0) {
+                listContainer.innerHTML = '<p class="text-muted text-center">No task history found.</p>';
+                return;
+            }
+
+            // Process and display history items
+            historyData.forEach(task => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'list-group-item list-group-item-action flex-column align-items-start mb-2 shadow-sm';
+
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'd-flex w-100 justify-content-between mb-2';
+
+                const titleH6 = document.createElement('h6');
+                titleH6.className = 'mb-0 text-break';
+                titleH6.innerHTML = 'Task ID: <code class="user-select-all text-danger"></code>';
+                titleH6.querySelector('code').textContent = task.id || 'N/A';
+
+                const controlsDiv = document.createElement('div'); // For badges and button
+
+                // Status Badge
+                const statusBadge = createStatusBadge(task.status);
+                controlsDiv.appendChild(statusBadge);
+
+                // View Output Button (only if not an error loading the log entry itself)
+                if (!task.error) {
+                    const outputButton = document.createElement('button');
+                    outputButton.type = 'button';
+                    outputButton.className = 'btn btn-sm btn-outline-info view-output-log'; // Keep class same as output modal expects
+                    outputButton.dataset.bsToggle = 'modal';
+                    outputButton.dataset.bsTarget = '#outputLogModal'; // Target the correct modal
+                    outputButton.dataset.taskId = task.id || '';       // Set the task ID
+                    outputButton.innerHTML = '<i class="fas fa-file-alt me-1"></i> Output';
+                    controlsDiv.appendChild(outputButton);
+                } else {
+                     // Optionally add a note that output isn't available due to load error
+                     const errorNote = document.createElement('span');
+                     errorNote.className = 'text-muted small fst-italic';
+                     errorNote.textContent = '(Output unavailable)';
+                     controlsDiv.appendChild(errorNote);
+                }
+
+
+                headerDiv.appendChild(titleH6);
+                headerDiv.appendChild(controlsDiv);
+
+                const promptP = document.createElement('p');
+                promptP.className = 'mb-1';
+                promptP.innerHTML = `<strong>Initial Prompt:</strong> `;
+                promptP.appendChild(document.createTextNode(task.prompt || 'N/A')); // Use textNode for safety
+
+                const timestampSmall = document.createElement('small');
+                timestampSmall.className = 'text-muted';
+                timestampSmall.textContent = `Timestamp: ${formatTimestamp(task.timestamp_iso)}`;
+
+                itemDiv.appendChild(headerDiv);
+                itemDiv.appendChild(promptP);
+                itemDiv.appendChild(timestampSmall);
+
+                listContainer.appendChild(itemDiv);
+            });
+
+        } catch (error) {
+            console.error('Error fetching or displaying task history:', error);
+            loadingIndicator.remove(); // Ensure loading is hidden on error
+            errorDisplay.textContent = error.message || 'An unexpected error occurred.';
+            errorDisplay.style.display = 'block';
+        }
+    });
+});
+</script>
