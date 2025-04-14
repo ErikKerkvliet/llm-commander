@@ -18,10 +18,6 @@
                     <p id="historyError" class="text-danger text-center" style="display: none;"></p>
                     <!-- History items will be inserted here by JavaScript -->
                 </div>
-
-                <!-- REMOVED Jinja loop -->
-                <!-- {% if task_history %} ... {% else %} ... {% endif %} -->
-
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -33,15 +29,48 @@
 <!-- Include the Output Log Modal HTML -->
 {% include 'modals/task_output_modal.html' %}
 
-<!-- JavaScript for Task History Loading (can be moved to a separate file) -->
+<!-- JavaScript for Task History Loading AND Modal Interaction -->
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const historyModalElement = document.getElementById('taskHistoryModal');
-    if (!historyModalElement) {
+    const outputModalElement = document.getElementById('outputLogModal'); // Get output modal element
+
+    // --- Ensure Modal Instances ---
+    let historyModalInstance = null;
+    let outputModalInstance = null;
+
+    if (historyModalElement) {
+        // Get existing instance or create a new one if needed
+        historyModalInstance = bootstrap.Modal.getInstance(historyModalElement) || new bootstrap.Modal(historyModalElement);
+    } else {
         console.error("Task History Modal element not found!");
-        return;
     }
 
+    if (outputModalElement) {
+        outputModalInstance = bootstrap.Modal.getInstance(outputModalElement) || new bootstrap.Modal(outputModalElement);
+    } else {
+        console.error("Output Log Modal element not found!");
+    }
+
+
+    // --- ***** NEW LOGIC: Re-show History Modal ***** ---
+    if (historyModalInstance && outputModalInstance) {
+        // Add listener to the OUTPUT modal's 'hidden' event
+        outputModalElement.addEventListener('hidden.bs.modal', function (event) {
+            // Check if the history modal element exists and is *not* currently shown
+            // (Bootstrap removes the 'show' class when hidden)
+            if (historyModalElement && !historyModalElement.classList.contains('show')) {
+                // It's hidden, likely because the output modal just closed over it.
+                // Re-show the history modal.
+                console.log("Output modal closed, re-showing history modal."); // For debugging
+                historyModalInstance.show();
+            }
+        });
+    }
+    // --- ***** END OF NEW LOGIC ***** ---
+
+
+    // --- Existing History Loading Logic ---
     const listContainer = document.getElementById('taskHistoryListContainer');
     const loadingIndicator = document.getElementById('historyLoadingIndicator');
     const errorDisplay = document.getElementById('historyError');
@@ -80,12 +109,11 @@ document.addEventListener('DOMContentLoaded', function () {
         return badge;
     }
 
-    // --- Helper to format timestamp ---
+    // Helper function to format timestamp (Keep As Is)
     function formatTimestamp(isoString) {
         if (!isoString) return 'Timestamp unavailable';
         try {
             const date = new Date(isoString);
-            // Basic formatting, adjust as needed (e.g., using libraries like moment.js/date-fns for better control)
             return date.toLocaleString(undefined, {
                  year: 'numeric', month: 'short', day: 'numeric',
                  hour: '2-digit', minute: '2-digit', second: '2-digit'
@@ -96,99 +124,100 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    historyModalElement.addEventListener('show.bs.modal', async function (event) {
-        // Clear previous state
-        listContainer.innerHTML = ''; // Clear previous items
-        errorDisplay.style.display = 'none';
-        errorDisplay.textContent = '';
-        loadingIndicator.style.display = 'block'; // Show loading indicator
-        listContainer.appendChild(loadingIndicator); // Add indicator back
+    // Event listener for showing the history modal (Keep As Is)
+    if (historyModalElement) {
+        historyModalElement.addEventListener('show.bs.modal', async function (event) {
+            // Clear previous state
+            listContainer.innerHTML = ''; // Clear previous items
+            errorDisplay.style.display = 'none';
+            errorDisplay.textContent = '';
+            loadingIndicator.style.display = 'block'; // Show loading indicator
+            listContainer.appendChild(loadingIndicator); // Add indicator back
 
-        try {
-            const response = await fetch('/task_history_data'); // Fetch from the new endpoint
+            try {
+                const response = await fetch('/task_history_data'); // Fetch from the new endpoint
 
-            if (!response.ok) {
-                let errorMsg = `Failed to load history: ${response.status} ${response.statusText}`;
-                try {
-                    const errData = await response.json();
-                    if (errData && errData.error) errorMsg = errData.error;
-                } catch (e) { /* ignore if body isn't json */ }
-                throw new Error(errorMsg);
-            }
-
-            const historyData = await response.json();
-
-            // Clear loading indicator once data is fetched (before processing)
-            loadingIndicator.remove();
-
-            if (!historyData || historyData.length === 0) {
-                listContainer.innerHTML = '<p class="text-muted text-center">No task history found.</p>';
-                return;
-            }
-
-            // Process and display history items
-            historyData.forEach(task => {
-                const itemDiv = document.createElement('div');
-                itemDiv.className = 'list-group-item list-group-item-action flex-column align-items-start mb-2 shadow-sm';
-
-                const headerDiv = document.createElement('div');
-                headerDiv.className = 'd-flex w-100 justify-content-between mb-2';
-
-                const titleH6 = document.createElement('h6');
-                titleH6.className = 'mb-0 text-break';
-                titleH6.innerHTML = 'Task ID: <code class="user-select-all text-danger"></code>';
-                titleH6.querySelector('code').textContent = task.id || 'N/A';
-
-                const controlsDiv = document.createElement('div'); // For badges and button
-
-                // Status Badge
-                const statusBadge = createStatusBadge(task.status);
-                controlsDiv.appendChild(statusBadge);
-
-                // View Output Button (only if not an error loading the log entry itself)
-                if (!task.error) {
-                    const outputButton = document.createElement('button');
-                    outputButton.type = 'button';
-                    outputButton.className = 'btn btn-sm btn-outline-info view-output-log'; // Keep class same as output modal expects
-                    outputButton.dataset.bsToggle = 'modal';
-                    outputButton.dataset.bsTarget = '#outputLogModal'; // Target the correct modal
-                    outputButton.dataset.taskId = task.id || '';       // Set the task ID
-                    outputButton.innerHTML = '<i class="fas fa-file-alt me-1"></i> Output';
-                    controlsDiv.appendChild(outputButton);
-                } else {
-                     // Optionally add a note that output isn't available due to load error
-                     const errorNote = document.createElement('span');
-                     errorNote.className = 'text-muted small fst-italic';
-                     errorNote.textContent = '(Output unavailable)';
-                     controlsDiv.appendChild(errorNote);
+                if (!response.ok) {
+                    let errorMsg = `Failed to load history: ${response.status} ${response.statusText}`;
+                    try {
+                        const errData = await response.json();
+                        if (errData && errData.error) errorMsg = errData.error;
+                    } catch (e) { /* ignore if body isn't json */ }
+                    throw new Error(errorMsg);
                 }
 
+                const historyData = await response.json();
 
-                headerDiv.appendChild(titleH6);
-                headerDiv.appendChild(controlsDiv);
+                // Clear loading indicator once data is fetched (before processing)
+                loadingIndicator.remove();
 
-                const promptP = document.createElement('p');
-                promptP.className = 'mb-1';
-                promptP.innerHTML = `<strong>Initial Prompt:</strong> `;
-                promptP.appendChild(document.createTextNode(task.prompt || 'N/A')); // Use textNode for safety
+                if (!historyData || historyData.length === 0) {
+                    listContainer.innerHTML = '<p class="text-muted text-center">No task history found.</p>';
+                    return;
+                }
 
-                const timestampSmall = document.createElement('small');
-                timestampSmall.className = 'text-muted';
-                timestampSmall.textContent = `Timestamp: ${formatTimestamp(task.timestamp_iso)}`;
+                // Process and display history items
+                historyData.forEach(task => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'list-group-item list-group-item-action flex-column align-items-start mb-2 shadow-sm';
 
-                itemDiv.appendChild(headerDiv);
-                itemDiv.appendChild(promptP);
-                itemDiv.appendChild(timestampSmall);
+                    const headerDiv = document.createElement('div');
+                    headerDiv.className = 'd-flex w-100 justify-content-between mb-2';
 
-                listContainer.appendChild(itemDiv);
-            });
+                    const titleH6 = document.createElement('h6');
+                    titleH6.className = 'mb-0 text-break';
+                    titleH6.innerHTML = 'Task ID: <code class="user-select-all text-danger"></code>';
+                    titleH6.querySelector('code').textContent = task.id || 'N/A';
 
-        } catch (error) {
-            console.error('Error fetching or displaying task history:', error);
-            loadingIndicator.remove(); // Ensure loading is hidden on error
-            errorDisplay.textContent = error.message || 'An unexpected error occurred.';
-            errorDisplay.style.display = 'block';
-        }
-    });
+                    const controlsDiv = document.createElement('div'); // For badges and button
+
+                    // Status Badge
+                    const statusBadge = createStatusBadge(task.status);
+                    controlsDiv.appendChild(statusBadge);
+
+                    // View Output Button
+                    if (!task.error) {
+                        const outputButton = document.createElement('button');
+                        outputButton.type = 'button';
+                        outputButton.className = 'btn btn-sm btn-outline-info view-output-log';
+                        outputButton.dataset.bsToggle = 'modal';
+                        outputButton.dataset.bsTarget = '#outputLogModal'; // Target the correct modal
+                        outputButton.dataset.taskId = task.id || '';       // Set the task ID
+                        outputButton.innerHTML = '<i class="fas fa-file-alt me-1"></i> Output';
+                        controlsDiv.appendChild(outputButton);
+                    } else {
+                         const errorNote = document.createElement('span');
+                         errorNote.className = 'text-muted small fst-italic';
+                         errorNote.textContent = '(Output unavailable)';
+                         controlsDiv.appendChild(errorNote);
+                    }
+
+                    headerDiv.appendChild(titleH6);
+                    headerDiv.appendChild(controlsDiv);
+
+                    const promptP = document.createElement('p');
+                    promptP.className = 'mb-1';
+                    promptP.innerHTML = `<strong>Initial Prompt:</strong> `;
+                    promptP.appendChild(document.createTextNode(task.prompt || 'N/A'));
+
+                    const timestampSmall = document.createElement('small');
+                    timestampSmall.className = 'text-muted';
+                    timestampSmall.textContent = `Timestamp: ${formatTimestamp(task.timestamp_iso)}`;
+
+                    itemDiv.appendChild(headerDiv);
+                    itemDiv.appendChild(promptP);
+                    itemDiv.appendChild(timestampSmall);
+
+                    listContainer.appendChild(itemDiv);
+                });
+
+            } catch (error) {
+                console.error('Error fetching or displaying task history:', error);
+                loadingIndicator.remove(); // Ensure loading is hidden on error
+                errorDisplay.textContent = error.message || 'An unexpected error occurred.';
+                errorDisplay.style.display = 'block';
+            }
+        });
+    }
 });
 </script>
