@@ -1,4 +1,4 @@
-<!-- START OF FILE: templates/dashboard.html -->
+<!-- templates/dashboard.html -->
 {% extends "base.html" %}
 
 {% block title %}{{ title or "Dashboard" }}{% endblock %}
@@ -54,6 +54,6 @@
 
 <!-- *** Include the Modal HTML from the separate file *** -->
 {% include 'modals/task_history_modal.html' %}
+{% include 'modals/task_output_modal.html' %}
 
 {% endblock %}
-<!-- END OF FILE: templates/dashboard.html -->

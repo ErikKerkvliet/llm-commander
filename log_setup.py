@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 
 LOGS_DIR = 'logs'
+LOGS_TASKS = 'logs/tasks'
 
 def setup_loggers():
     """Configures the base logs directory and the main error logger."""
@@ -27,7 +28,7 @@ def setup_loggers():
             error_log_path = os.path.join(LOGS_DIR, 'error.log')
             err_handler = logging.FileHandler(error_log_path, encoding='utf-8')
             err_handler.setLevel(logging.ERROR)
-            err_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s [%(filename)s:%(lineno)d]')
+            err_formatter = logging.Formatter('%(asctime)s - %(msecs)s - %(message)s [%(filename)s:%(lineno)d]')
             err_handler.setFormatter(err_formatter)
             error_logger.addHandler(err_handler)
             # Also log critical errors to console
