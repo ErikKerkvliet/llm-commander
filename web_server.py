@@ -1,6 +1,7 @@
 import os
 import logging
 import socket
+import re
 import getpass
 import uuid # Import uuid
 import threading # Import threading
@@ -25,7 +26,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 # Import configuration and the main app class
 from config import settings
 from llm_commander import LLMCommanderApp # Import the main application class
-from log_setup import error_logger, LOGS_DIR # Import error logger and logs dir
+from log_setup import error_logger, LOGS_DIR, LOGS_TASKS # Import error logger and logs dir
+from log_data_extractor import extract_log_data
+
+TASK_ID_PATTERN = re.compile(r"^\d{8}_\d{6}_[a-f0-9\-]+$", re.IGNORECASE)
 
 # --- Initialize Core Application Logic ---
 # Create a single instance of the main application
@@ -186,19 +190,43 @@ def dashboard():
     # Placeholder logic...
     current_main_task = "Example: Deploy web application"
     current_step = "Example: Waiting for user confirmation"
-    history_data = [
-        {'id': 'conv_abc_123', 'prompt': 'Install nginx', 'status': 'Success', 'timestamp': '2023-10-27 10:00:00'},
-        # ... more tasks
-    ]
+
+    history_data = []
+    # --- Robust history loading ---
+    if os.path.exists(LOGS_TASKS): # Check if the main tasks directory exists
+        try:
+            for item_name in os.listdir(LOGS_TASKS):
+                item_path = os.path.join(LOGS_TASKS, item_name)
+                if os.path.isdir(item_path): # Process only if it's a directory
+                    try:
+                        log_data = extract_log_data(item_name) # Pass only the folder name
+                        if log_data: # Check if data extraction was successful
+                            history_data.append(log_data)
+                        else:
+                             app.logger.warning(f"Could not extract data for task folder: {item_name}")
+                    except Exception as e:
+                        app.logger.error(f"Error processing task log folder '{item_name}': {e}", exc_info=True)
+                        # Optionally append placeholder data or skip
+                        # history_data.append({'id': item_name, 'status': 'Error Loading', 'prompt': 'Error', 'commands': [], 'timestamp': None})
+        except OSError as e:
+            app.logger.error(f"Error listing task log directory '{LOGS_TASKS}': {e}", exc_info=True)
+            flash(f"Error reading task history: {e}", "danger")
+    else:
+        app.logger.info(f"Task logs directory '{LOGS_TASKS}' not found. No history to display.")
+    # --- End Robust history loading ---
+
+    # Sort history by timestamp descending (newest first), handle None timestamps
+    history_data.sort(key=lambda x: x.get('timestamp', datetime.min), reverse=True)
+
     app.logger.info(f"Serving Dashboard Tab to user: {current_user.id}")
     return render_template(
         'dashboard.html',
         username=current_user.id,
         title="Dashboard",
         active_tab="dashboard",
-        main_task=current_main_task,
-        current_task=current_step,
-        task_history=history_data
+        main_task=current_main_task, # This is still placeholder
+        current_task=current_step,  # This is still placeholder
+        task_history=history_data  # Pass the loaded and sorted data
     )
 
 # --- API Endpoints for Asynchronous Task Handling ---
@@ -310,7 +338,7 @@ def get_task_status(task_id):
     # Selectively return fields relevant to the frontend
     status_response = {
         "task_id": task_id,
-        "status": task_info["status"],
+        "status": task_info["status"].replace("_", " ").capitalize(),
         "prompt_needed": task_info.get("prompt_needed", False),
         "prompt_text": task_info.get("prompt_text") if task_info.get("prompt_needed") else None,
         "input_type": task_info.get("input_type") if task_info.get("prompt_needed") else None,
@@ -324,6 +352,68 @@ def get_task_status(task_id):
 
     app.logger.debug(f"Task {task_id} status for user '{user_id}': {status_response['status']}")
     return jsonify(status_response), 200
+
+@app.route('/task_output/<task_id>', methods=['GET'])
+@login_required
+def get_task_output(task_id):
+    """Serves the content of a task's output.log file."""
+    user_id = current_user.id
+    app.logger.info(f"User '{user_id}' requested output log for task: {task_id}")
+
+    # --- Security Validation ---
+    # 1. Validate task_id format to prevent path traversal
+    if not task_id or not TASK_ID_PATTERN.match(task_id):
+        app.logger.warning(f"Invalid task ID format requested by user '{user_id}': {task_id}")
+        return jsonify({"error": "Invalid Task ID format."}), 400
+
+    # 2. Construct the path *carefully*
+    # Note: We trust LOGS_TASKS comes from a safe source (our config/setup)
+    try:
+        # Base directory MUST be absolute for security checks if done via commonpath
+        # But os.path.join handles relative paths correctly here.
+        # We rely on the task_id regex validation as the primary path safety mechanism.
+        log_dir = os.path.join(LOGS_TASKS, task_id)
+        output_log_file = os.path.join(log_dir, 'output.log')
+
+        # Optional: More robust path check (if not fully trusting regex)
+        # abs_log_dir = os.path.abspath(log_dir)
+        # abs_logs_tasks = os.path.abspath(LOGS_TASKS)
+        # if os.path.commonpath([abs_log_dir, abs_logs_tasks]) != abs_logs_tasks:
+        #     app.logger.error(f"Path Traversal Attempt? User '{user_id}', Task ID '{task_id}', Computed Path '{log_dir}'")
+        #     abort(404) # Treat as Not Found
+
+    except Exception as path_e:
+        app.logger.error(f"Error constructing path for task '{task_id}': {path_e}", exc_info=True)
+        return jsonify({"error": "Internal error creating log path."}), 500
+
+    # --- Check File Existence and Read ---
+    if not os.path.exists(output_log_file):
+        app.logger.warning(f"Output log file not found for task '{task_id}' requested by user '{user_id}'. Path: {output_log_file}")
+        return jsonify({"error": "Output log file not found."}), 404
+    if not os.path.isfile(output_log_file):
+         app.logger.error(f"Path exists but is not a file for output log '{task_id}'. Path: {output_log_file}")
+         return jsonify({"error": "Log path is invalid."}), 500
+
+    try:
+        # Read the entire file content - potentially large!
+        # Consider streaming or chunking for very large logs if performance is an issue.
+        with open(output_log_file, 'r', encoding='utf-8') as f:
+            log_content = f.read()
+        app.logger.info(f"Successfully read output log for task '{task_id}' (length: {len(log_content)})")
+        # Return as plain text
+        return log_content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+        # --- Alternative: Return as JSON ---
+        # return jsonify({"output": log_content}), 200
+
+    except IOError as e:
+        app.logger.error(f"IOError reading output log file for task '{task_id}': {e}", exc_info=True)
+        error_logger.error(f"(Web Server) IOError reading output log file for task '{task_id}': {e}", exc_info=True)
+        return jsonify({"error": f"Error reading log file: {e}"}), 500
+    except Exception as e:
+        app.logger.error(f"Unexpected error reading output log file for task '{task_id}': {e}", exc_info=True)
+        error_logger.error(f"(Web Server) Unexpected error reading output log file for task '{task_id}': {e}", exc_info=True)
+        return jsonify({"error": "An unexpected error occurred reading the log."}), 500
 
 
 @app.route('/provide_input/<task_id>', methods=['POST'])

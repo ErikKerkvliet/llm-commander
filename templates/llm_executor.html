@@ -4,102 +4,115 @@
 
 {% block head_extra %}
 <style>
-    /* Basic styling for the modal */
-    .modal {
-        display: none; /* Hidden by default */
-        position: fixed; /* Stay in place */
-        z-index: 1051; /* Sit on top */
-        left: 0;
-        top: 0;
-        width: 100%; /* Full width */
-        height: 100%; /* Full height */
-        overflow: auto; /* Enable scroll if needed */
-        background-color: rgba(0,0,0,0.5); /* Black w/ opacity */
+    /* --- Modal Styles (Keep As Is) --- */
+    .modal { display: none; position: fixed; z-index: 1051; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); }
+    .modal-dialog { position: relative; margin: 5% auto; padding: 0; width: 80%; max-width: 600px; pointer-events: none; }
+    .modal-content { position: relative; display: flex; flex-direction: column; width: 100%; pointer-events: auto; background-color: #fff; background-clip: padding-box; border: 1px solid rgba(0, 0, 0, 0.2); border-radius: 0.3rem; outline: 0; color: #333; }
+    .modal-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 1rem 1rem; border-bottom: 1px solid #dee2e6; border-top-left-radius: calc(0.3rem - 1px); border-top-right-radius: calc(0.3rem - 1px); }
+    .modal-title { margin-bottom: 0; line-height: 1.5; font-size: 1.25rem; }
+    .modal-body { position: relative; flex: 1 1 auto; padding: 1rem; }
+    .modal-body pre { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 0.5rem; border-radius: 0.2rem; white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.9em; }
+    .modal-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; padding: 0.75rem; border-top: 1px solid #dee2e6; border-bottom-right-radius: calc(0.3rem - 1px); border-bottom-left-radius: calc(0.3rem - 1px); }
+    .modal-footer > * { margin: 0.25rem; }
+    #modalInput { flex-grow: 1; margin-right: 0.5rem; }
+    #modalConfirmYes, #modalConfirmNo { margin-left: 0.5rem; }
+
+    /* --- Styles for Results Area (Updated) --- */
+    #results-area { margin-top: 1.5rem; }
+
+    /* Container for the main results box (border, scroll) */
+    #results-main-box {
+        border: 1px solid #dee2e6; /* Match BS border color */
+        border-radius: 0.25rem;
+        margin-top: 1rem; /* Space below the banner */
+        max-height: 70vh; /* Limit height and add scroll */
+        overflow-y: auto;
+        background-color: #fff; /* White background */
+         padding: 1rem; /* Add padding inside the box */
     }
 
-    .modal-dialog {
-        position: relative;
-        margin: 5% auto; /* 5% from the top and centered */
-        padding: 0;
-        width: 80%; /* Could be more or less, depending on screen size */
-        max-width: 600px; /* Maximum width */
-        pointer-events: none;
+    /* Heading inside the main results box */
+    #overall-status-heading {
+        font-size: 1.1rem;
+        font-weight: bold;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #eee;
     }
+     #overall-status-heading.status-success { color: #198754; }
+     #overall-status-heading.status-failure { color: #dc3545; }
 
-    .modal-content {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        width: 100%;
-        pointer-events: auto;
-        background-color: #fff;
-        background-clip: padding-box;
-        border: 1px solid rgba(0, 0, 0, 0.2);
-        border-radius: 0.3rem;
-        outline: 0;
-        color: #333; /* Dark text for readability */
+
+    .attempt-block {
+        /* Removed border from attempt block itself, now on parent */
+        padding: 0 0 1rem 0; /* Add padding bottom */
+        margin-bottom: 1rem;
+        border-bottom: 1px dashed #eee; /* Dashed line between attempts */
     }
-
-    .modal-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        padding: 1rem 1rem;
-        border-bottom: 1px solid #dee2e6;
-        border-top-left-radius: calc(0.3rem - 1px);
-        border-top-right-radius: calc(0.3rem - 1px);
-    }
-
-     .modal-title {
+    .attempt-block:last-child {
+        border-bottom: none; /* No line after the last attempt */
         margin-bottom: 0;
-        line-height: 1.5;
-        font-size: 1.25rem;
-     }
-
-    .modal-body {
-        position: relative;
-        flex: 1 1 auto;
-        padding: 1rem;
+        padding-bottom: 0;
     }
 
-    .modal-body pre {
+    .attempt-block h5 { /* Attempt number heading */
+        margin-bottom: 0.75rem;
+        color: #6c757d; /* Grey color */
+        font-size: 1rem; /* Slightly smaller */
+    }
+
+    .attempt-block strong { /* Labels like "Prompt Sent:" */
+        display: block;
+        margin-bottom: 0.3rem;
+        color: #343a40;
+        font-weight: bold; /* Ensure bold */
+        font-size: 0.95rem;
+    }
+
+    /* Shared style for <pre> blocks (prompt, output, error) */
+    .attempt-block pre {
         background-color: #f8f9fa;
         border: 1px solid #dee2e6;
-        padding: 0.5rem;
+        padding: 0.75rem;
         border-radius: 0.2rem;
-        white-space: pre-wrap; /* Wrap long lines */
-        word-wrap: break-word; /* Break words if necessary */
-        max-height: 300px; /* Limit height and make scrollable */
-        overflow-y: auto;
-        font-family: monospace; /* Use monospace font for prompts */
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.9em;
+        color: #212529;
+        margin-bottom: 1rem; /* Increased space below blocks */
+        /* Removed max-height/overflow from individual boxes, handled by parent */
+    }
+
+    /* Specific styling for scrollable output/error boxes if needed */
+    .attempt-block pre.output-box,
+    .attempt-block pre.error-box {
+         max-height: 400px; /* Allow individual scroll for long outputs */
+         overflow-y: auto;
+    }
+
+    .attempt-block pre.error-box { /* Error block specific colors */
+        background-color: #f8d7da;
+        border-color: #f5c6cb;
+        color: #721c24;
+    }
+
+    /* Updated Command List Styling */
+    .attempt-block ul.command-list {
+        list-style: disc; /* Use bullet points */
+        padding-left: 20px; /* Indent bullet points */
+        margin-bottom: 1rem;
+        font-family: 'Courier New', Courier, monospace;
         font-size: 0.9em;
     }
-
-    .modal-footer {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: flex-end; /* Align buttons to the right */
-        padding: 0.75rem;
-        border-top: 1px solid #dee2e6;
-        border-bottom-right-radius: calc(0.3rem - 1px);
-        border-bottom-left-radius: calc(0.3rem - 1px);
+    .attempt-block ul.command-list li {
+        margin-bottom: 0.3rem;
+        color: #d63384; /* Bootstrap pinkish-red color for commands */
+        word-break: break-all; /* Break long commands */
     }
 
-    .modal-footer > * {
-       margin: 0.25rem;
-    }
-
-    /* Style inputs inside modal */
-    #modalInput {
-        flex-grow: 1; /* Take available space */
-        margin-right: 0.5rem; /* Space before button */
-    }
-
-    /* Style confirmation buttons */
-    #modalConfirmYes, #modalConfirmNo {
-        margin-left: 0.5rem;
-    }
+    .exec-status-success { color: #198754; font-weight: bold; }
+    .exec-status-failure { color: #dc3545; font-weight: bold; }
 
 </style>
 {% endblock %}
@@ -113,9 +126,10 @@
         </div>
         <div class="card-body">
             <form id="execute-form">
+                <!-- Form fields remain the same -->
                 <div class="mb-3">
                     <label for="prompt" class="form-label">Task Prompt:</label>
-                    <textarea class="form-control" id="prompt" name="prompt" rows="5" placeholder="Enter your task description (e.g., 'Install nginx and start the service', 'Check disk space on /var')"></textarea>
+                    <textarea class="form-control" id="prompt" name="prompt" rows="5" placeholder="Enter your task description..."></textarea>
                 </div>
                 <div class="mb-3 row">
                      <label for="max_retries" class="col-sm-3 col-form-label">Max Retries on Failure:</label>
@@ -130,27 +144,39 @@
                  <span id="task-status-message" class="ms-3 text-muted"></span>
             </form>
 
-            <hr>
+            <!-- Results Area Updated Structure -->
+            <div id="results-area">
+                <hr>
+                <!-- Overall Status Banner (Top Green/Red Bar) -->
+                <div id="overall-status-banner" class="alert" role="alert" style="display: none; font-weight: bold;">
+                    Task completed successfully/failed.
+                </div>
 
-            <div id="results-area" class="mt-3">
-                <h5>Results:</h5>
-                <div id="results-log" style="white-space: pre-wrap; background-color: #f8f9fa; border: 1px solid #eee; padding: 10px; min-height: 100px; max-height: 500px; overflow-y: auto; font-family: monospace; font-size: 0.9em;">
-                    Task results will appear here...
+                <!-- Main Box for Details -->
+                <div id="results-main-box" style="display: none;">
+                     <!-- Overall Status Heading (Inside Box) -->
+                    <h4 id="overall-status-heading" style="display: none;">Overall Status: Success/Failure</h4>
+
+                    <!-- Container for detailed attempts -->
+                    <div id="results-details-container">
+                         <!-- Initial placeholder -->
+                        <p id="results-placeholder" class="text-muted">Task results will appear here...</p>
+                    </div>
                 </div>
             </div>
+            <!-- End Results Area -->
+
         </div>
     </div>
 </div>
 
-<!-- Input Modal -->
+<!-- Input Modal (Keep As Is) -->
+<!-- ... modal html ... -->
 <div class="modal" id="inputModal" tabindex="-1" aria-labelledby="inputModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="inputModalLabel">Input Required</h5>
-        <!-- Optional: Add a close button if needed, but submission is primary action
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        -->
       </div>
       <div class="modal-body">
         <p>The running task requires input. Please review the prompt below:</p>
@@ -165,45 +191,44 @@
         </div>
         <div id="modalConfirmationArea" class="mt-3" style="display: none;">
             <p>Do you want to proceed?</p>
-            <!-- Buttons handled in footer -->
         </div>
       </div>
       <div class="modal-footer">
-         <!-- Generic Input Submit -->
          <button type="button" class="btn btn-primary" id="modalSubmit">Submit Input</button>
-         <!-- Confirmation Buttons -->
          <button type="button" class="btn btn-success" id="modalConfirmYes" style="display: none;">Yes</button>
          <button type="button" class="btn btn-danger" id="modalConfirmNo" style="display: none;">No</button>
-         <!-- Password Submit -->
          <button type="button" class="btn btn-primary" id="modalSubmitPassword" style="display: none;">Submit Password</button>
-         <!-- Optional Cancel/Abort Button -->
-         <!-- <button type="button" class="btn btn-secondary" id="modalCancel">Cancel Task (Not Implemented)</button> -->
       </div>
     </div>
   </div>
 </div>
-
 {% endblock %}
 
 
 {% block scripts_extra %}
 <script>
-    // Global variables for task state
+    // Global variables (Keep As Is)
     let currentTaskId = null;
     let pollIntervalId = null;
-    const pollIntervalMs = 2000; // Check status every 2 seconds
+    const pollIntervalMs = 2000;
 
     const executeForm = document.getElementById('execute-form');
     const executeButton = document.getElementById('execute-button');
     const executeSpinner = document.getElementById('execute-spinner');
-    const resultsLog = document.getElementById('results-log');
     const taskStatusMessage = document.getElementById('task-status-message');
+    // --- Updated references for results area ---
+    const resultsArea = document.getElementById('results-area');
+    const overallStatusBanner = document.getElementById('overall-status-banner');
+    // --- New references ---
+    const resultsMainBox = document.getElementById('results-main-box');
+    const overallStatusHeading = document.getElementById('overall-status-heading');
+    // --- ---
+    const resultsDetailsContainer = document.getElementById('results-details-container');
+    const resultsPlaceholder = document.getElementById('results-placeholder');
 
-    // Modal elements
-    const inputModal = new bootstrap.Modal(document.getElementById('inputModal'), {
-        keyboard: false, // Prevent closing with Esc key if needed
-        backdrop: 'static' // Prevent closing by clicking background
-    });
+    // Modal elements (Keep As Is)
+    // ... modal element references remain the same ...
+    const inputModal = new bootstrap.Modal(document.getElementById('inputModal'), { keyboard: false, backdrop: 'static' });
     const modalPromptText = document.getElementById('modalPromptText');
     const modalInputArea = document.getElementById('modalInputArea');
     const modalInput = document.getElementById('modalInput');
@@ -216,34 +241,138 @@
     const modalSubmitPasswordButton = document.getElementById('modalSubmitPassword');
 
 
-    // Function to display results
+    // --- Updated displayResults function ---
     function displayResults(data) {
-        let output = `Task ID: ${currentTaskId}\n`;
-        output += `Overall Success: ${data.overall_success}\n\n`;
-        output += `Attempt History:\n----------------\n`;
+        // Clear previous results and hide/reset elements
+        overallStatusBanner.innerHTML = '';
+        overallStatusBanner.className = 'alert'; // Reset classes
+        overallStatusBanner.style.display = 'none';
+        overallStatusHeading.innerHTML = '';
+        overallStatusHeading.className = ''; // Reset classes
+        overallStatusHeading.style.display = 'none';
+        resultsDetailsContainer.innerHTML = '';
+        resultsMainBox.style.display = 'none'; // Hide the main box initially
+        if(resultsPlaceholder) resultsPlaceholder.style.display = 'none';
 
+        let overallStatusText = '';
+        let overallStatusClassSuffix = ''; // 'success' or 'failure'
+
+        if (data.overall_success !== undefined) { // Check if final status is known
+             if (data.overall_success) {
+                 overallStatusText = `Task completed successfully.`;
+                 overallStatusClassSuffix = 'success';
+             } else {
+                 overallStatusText = `Task failed.`;
+                 overallStatusClassSuffix = 'failure';
+             }
+             // Set Top Banner
+             overallStatusBanner.textContent = overallStatusText;
+             overallStatusBanner.classList.add(`alert-${overallStatusClassSuffix}`);
+             overallStatusBanner.style.display = 'block';
+
+             // Set Heading inside Box
+             overallStatusHeading.textContent = `Overall Status: ${overallStatusClassSuffix === 'success' ? 'Success' : 'Failure'}`;
+             overallStatusHeading.classList.add(`status-${overallStatusClassSuffix}`);
+             overallStatusHeading.style.display = 'block';
+
+             resultsMainBox.style.display = 'block'; // Show the main box
+
+        } else if (data.error) {
+            // Handle case where the task failed critically
+            overallStatusBanner.textContent = `Task failed critically: ${data.error}`;
+            overallStatusBanner.classList.add('alert-danger');
+            overallStatusBanner.style.display = 'block';
+            resultsMainBox.style.display = 'none'; // Keep main box hidden
+            return;
+        } else {
+             // If status isn't final and no error, keep placeholder visible?
+             if(resultsPlaceholder) resultsPlaceholder.style.display = 'block';
+             return; // Don't proceed if no final status or error
+        }
+
+
+        // Display attempt history
         if (data.results && data.results.length > 0) {
             data.results.forEach(attempt => {
-                output += `Attempt ${attempt.attempt}:\n`;
-                output += `  LLM Commands:\n${attempt.llm_commands ? attempt.llm_commands.map(cmd => `    $ ${cmd}`).join('\n') : '    (None)'}\n`;
-                output += `  Execution Success: ${attempt.execution_success}\n`;
+                const attemptDiv = document.createElement('div');
+                attemptDiv.className = 'attempt-block'; // Apply styling
+
+                // Attempt Number Heading
+                const attemptHeading = document.createElement('h5');
+                attemptHeading.textContent = `Attempt ${attempt.attempt}`;
+                attemptDiv.appendChild(attemptHeading);
+
+                // Prompt Sent
+                const promptLabel = document.createElement('strong');
+                promptLabel.textContent = 'Prompt Sent:';
+                attemptDiv.appendChild(promptLabel);
+                const promptPre = document.createElement('pre');
+                promptPre.textContent = attempt.prompt_sent || '(Not available)';
+                attemptDiv.appendChild(promptPre);
+
+                // LLM Commands Proposed
+                const commandsLabel = document.createElement('strong');
+                commandsLabel.textContent = 'LLM Commands Proposed:';
+                attemptDiv.appendChild(commandsLabel);
+                if (attempt.llm_commands && attempt.llm_commands.length > 0) {
+                    // Use ul with class command-list
+                    const commandsList = document.createElement('ul');
+                    commandsList.className = 'command-list'; // Add class for styling
+                    attempt.llm_commands.forEach(cmd => {
+                        const listItem = document.createElement('li');
+                        // Just put the command text in the li, styling handles appearance
+                        listItem.textContent = `$ ${cmd}`;
+                        commandsList.appendChild(listItem);
+                    });
+                    attemptDiv.appendChild(commandsList);
+                } else {
+                    const noCommandsP = document.createElement('p');
+                    noCommandsP.textContent = '(None)';
+                    attemptDiv.appendChild(noCommandsP);
+                }
+
+                // Execution Success Status
+                const execStatusLabel = document.createElement('strong');
+                execStatusLabel.textContent = 'Execution Success: ';
+                attemptDiv.appendChild(execStatusLabel);
+                const execStatusSpan = document.createElement('span');
+                execStatusSpan.textContent = attempt.execution_success ? 'true' : 'false';
+                execStatusSpan.className = attempt.execution_success ? 'exec-status-success' : 'exec-status-failure';
+                attemptDiv.appendChild(execStatusSpan);
+                attemptDiv.appendChild(document.createElement('br')); // Line break
+                attemptDiv.appendChild(document.createElement('br')); // Line break
+
+
+                // Output (stdout/filtered)
                 if (attempt.stdout) {
-                     output += `  Output/Log:\n${attempt.stdout}\n`; // Already filtered
+                    const outputLabel = document.createElement('strong');
+                    outputLabel.textContent = 'Output (stdout):';
+                    attemptDiv.appendChild(outputLabel);
+                    const outputPre = document.createElement('pre');
+                    outputPre.className = 'output-box'; // Add class for scrolling/styling
+                    outputPre.textContent = attempt.stdout;
+                    attemptDiv.appendChild(outputPre);
                 }
+
+                // Errors (stderr)
                 if (attempt.stderr) {
-                    output += `  Errors:\n${attempt.stderr}\n`;
+                    const errorLabel = document.createElement('strong');
+                    errorLabel.textContent = 'Errors (stderr):';
+                    attemptDiv.appendChild(errorLabel);
+                    const errorPre = document.createElement('pre');
+                    errorPre.className = 'error-box'; // Different style for errors
+                    errorPre.textContent = attempt.stderr;
+                    attemptDiv.appendChild(errorPre);
                 }
-                 output += `----------------\n`;
+
+                 resultsDetailsContainer.appendChild(attemptDiv); // Add this attempt block to the container
             });
-        } else if (data.error) {
-             output += `Task Failed Critically: ${data.error}\n`;
-        } else {
-            output += "(No attempt data available)\n";
+        } else if (!data.error) {
+            resultsDetailsContainer.innerHTML = '<p class="text-muted">No execution attempts recorded.</p>';
         }
-        resultsLog.textContent = output;
     }
 
-    // Function to stop polling and reset UI
+    // Function to stop polling and reset UI (Keep As Is)
     function stopPollingAndReset() {
         if (pollIntervalId) {
             clearInterval(pollIntervalId);
@@ -253,11 +382,12 @@
         executeButton.disabled = false;
         executeSpinner.style.display = 'none';
         taskStatusMessage.textContent = '';
-         // Ensure modal is hidden
         inputModal.hide();
+        // Do NOT hide resultsMainBox here, keep results visible
     }
 
-    // Function to check task status
+    // Function to check task status (Keep As Is)
+    // ... checkTaskStatus function remains the same ...
     async function checkTaskStatus() {
         if (!currentTaskId) return;
 
@@ -266,17 +396,16 @@
             const response = await fetch(`/task_status/${currentTaskId}`);
             if (!response.ok) {
                 console.error(`Error fetching status: ${response.status}`);
-                taskStatusMessage.textContent = `Error: ${response.status}`;
-                // Decide if polling should stop on error
-                // stopPollingAndReset();
-                 if (response.status === 404) { // Task not found, likely finished and cleaned up or invalid ID
+                const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+                taskStatusMessage.textContent = `Error: ${errorData.message || response.status}`;
+                 if (response.status === 404) {
                      console.warn("Task ID not found during polling. Stopping.");
-                     resultsLog.textContent += "\n\nPolling stopped: Task ID not found (may have completed or timed out).";
+                     // Don't modify results area here, just stop
                      stopPollingAndReset();
                  }
-                 if (response.status === 403) { // Forbidden
+                 if (response.status === 403) {
                     console.warn("Access denied polling task status. Stopping.");
-                    resultsLog.textContent += "\n\nPolling stopped: Access denied.";
+                    // Don't modify results area here, just stop
                     stopPollingAndReset();
                 }
                 return;
@@ -286,29 +415,31 @@
             console.log("Status data:", data);
             taskStatusMessage.textContent = `Status: ${data.status}`;
 
-            if (data.status === 'complete' || data.status === 'failed') {
+            if (data.status.toLowerCase() === 'complete' || data.status.toLowerCase() === 'failed') {
                 taskStatusMessage.textContent = `Status: ${data.status}`;
                 if (data.result) {
-                    displayResults(data.result);
+                    displayResults(data.result); // Update results area with final data
                 } else {
-                     resultsLog.textContent += `\n\nTask ${data.status}, but no final result data received.`;
+                     // Display minimal error message if result object is missing
+                     overallStatusBanner.textContent = `Task ${data.status}, but no final result data received.`;
+                     overallStatusBanner.classList.add('alert-warning');
+                     overallStatusBanner.style.display = 'block';
+                     resultsMainBox.style.display = 'none';
                 }
-                stopPollingAndReset();
+                stopPollingAndReset(); // Stop polling
             } else if (data.prompt_needed) {
                 console.log("Input needed!");
-                // Show modal based on input_type
-                modalPromptText.textContent = data.prompt_text || '(No prompt text provided)';
+                 // Update modal content (same as before)
+                 modalPromptText.textContent = data.prompt_text || '(No prompt text provided)';
+                 modalInputArea.style.display = 'none';
+                 modalPasswordArea.style.display = 'none';
+                 modalConfirmationArea.style.display = 'none';
+                 modalSubmitButton.style.display = 'none';
+                 modalConfirmYesButton.style.display = 'none';
+                 modalConfirmNoButton.style.display = 'none';
+                 modalSubmitPasswordButton.style.display = 'none';
 
-                // Hide all input/button types first
-                modalInputArea.style.display = 'none';
-                modalPasswordArea.style.display = 'none';
-                modalConfirmationArea.style.display = 'none';
-                modalSubmitButton.style.display = 'none';
-                modalConfirmYesButton.style.display = 'none';
-                modalConfirmNoButton.style.display = 'none';
-                modalSubmitPasswordButton.style.display = 'none';
-
-                if (data.input_type === 'confirmation') {
+                 if (data.input_type === 'confirmation') {
                     document.getElementById('inputModalLabel').textContent = 'Confirmation Required';
                     modalConfirmationArea.style.display = 'block';
                     modalConfirmYesButton.style.display = 'inline-block';
@@ -317,87 +448,82 @@
                      document.getElementById('inputModalLabel').textContent = 'Password Required';
                     modalPasswordArea.style.display = 'block';
                     modalSubmitPasswordButton.style.display = 'inline-block';
-                    modalPasswordInput.value = ''; // Clear previous input
+                    modalPasswordInput.value = '';
                     modalPasswordInput.focus();
-                } else { // Default to generic text input
+                } else {
                      document.getElementById('inputModalLabel').textContent = 'Input Required';
                     modalInputArea.style.display = 'block';
                     modalSubmitButton.style.display = 'inline-block';
-                    modalInput.value = ''; // Clear previous input
+                    modalInput.value = '';
                     modalInput.focus();
                 }
-
-                 // Ensure the modal is shown (Bootstrap 5)
-                 // Check if it's already shown to avoid flicker? Might not be necessary.
+                 // Show modal (same as before)
                  const modalElement = document.getElementById('inputModal');
                  const modalInstance = bootstrap.Modal.getInstance(modalElement);
                  if (!modalInstance || !modalElement.classList.contains('show')) {
                      inputModal.show();
                  }
-
-                // Polling continues in the background while modal is shown
             } else {
-                 // Task is running, started, resuming - hide modal if it was somehow left open
+                 // Task is running, started, resuming - hide modal
                  inputModal.hide();
+                 // Keep showing placeholder or previous results until final state
+                 if (resultsMainBox.style.display === 'none') { // Only show placeholder if nothing else is visible
+                     if(resultsPlaceholder) resultsPlaceholder.style.display = 'block';
+                 }
             }
 
         } catch (error) {
             console.error('Error during polling:', error);
             taskStatusMessage.textContent = 'Polling Error';
-            // Consider stopping polling on network errors?
+            // Consider stopping or showing error more permanently
         }
     }
 
-     // Function to submit input from the modal
-    async function submitInput(inputValue) {
+
+     // Function to submit input from the modal (Keep As Is)
+     // ... submitInput function remains the same ...
+     async function submitInput(inputValue) {
         if (!currentTaskId) return;
-
         console.log(`Submitting input for ${currentTaskId}: ${inputValue.substring(0, 20)}...`);
-        inputModal.hide(); // Hide modal immediately
+        inputModal.hide();
         taskStatusMessage.textContent = 'Submitting input...';
-
         try {
             const response = await fetch(`/provide_input/${currentTaskId}`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json', },
                 body: JSON.stringify({ user_input: inputValue }),
             });
-
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await response.json().catch(() => ({ message: 'Unknown submission error' }));
                 console.error(`Error submitting input: ${response.status}`, errorData);
-                resultsLog.textContent += `\n\nError submitting input: ${errorData.message || response.status}`;
+                // Append error message inside the details container?
+                resultsDetailsContainer.innerHTML += `<p class="text-danger mt-2">Error submitting input: ${errorData.message || response.status}</p>`;
                 taskStatusMessage.textContent = `Error: ${errorData.message || response.status}`;
-                // Decide if we should stop polling here
                  if (response.status === 404 || response.status === 409 || response.status === 403) {
-                     stopPollingAndReset(); // Stop if task not found, not waiting, or forbidden
+                     stopPollingAndReset(); // Stop polling but keep results visible
                  }
             } else {
                  const data = await response.json();
                  console.log("Input submission response:", data);
-                 taskStatusMessage.textContent = 'Input submitted, resuming...';
-                 // Polling will eventually pick up the 'complete' or 'failed' status
+                 taskStatusMessage.textContent = 'Input submitted, resuming...'; // Status updated by next poll
             }
         } catch (error) {
             console.error('Network error submitting input:', error);
-            resultsLog.textContent += '\n\nNetwork error submitting input.';
+            resultsDetailsContainer.innerHTML += '<p class="text-danger mt-2">Network error submitting input.</p>';
             taskStatusMessage.textContent = 'Network Error';
         }
     }
 
-    // Event listener for the main execute form
+
+    // Event listener for the main execute form (Update result clearing)
     executeForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (currentTaskId) {
             alert("A task is already running.");
             return;
         }
-
         const prompt = document.getElementById('prompt').value;
         const maxRetries = document.getElementById('max_retries').value;
-
         if (!prompt.trim()) {
             alert("Please enter a prompt.");
             return;
@@ -405,72 +531,62 @@
 
         executeButton.disabled = true;
         executeSpinner.style.display = 'inline-block';
-        resultsLog.textContent = 'Starting task...'; // Clear previous results
+        // --- Clear previous results ---
+        overallStatusBanner.style.display = 'none';
+        resultsMainBox.style.display = 'none';
+        resultsDetailsContainer.innerHTML = ''; // Clear details
+        if(resultsPlaceholder) resultsPlaceholder.style.display = 'block'; // Show placeholder
+        // --- ---
         taskStatusMessage.textContent = 'Starting...';
 
         try {
             const response = await fetch('/execute', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json', },
                 body: JSON.stringify({ prompt: prompt, max_retries: maxRetries }),
             });
-
             const data = await response.json();
-
             if (!response.ok) {
                 console.error('Error starting task:', data);
-                resultsLog.textContent = `Error starting task: ${data.message || response.status}`;
-                stopPollingAndReset(); // Reset UI on failure to start
+                 overallStatusBanner.textContent = `Error starting task: ${data.message || response.status}`;
+                 overallStatusBanner.className = 'alert alert-danger';
+                 overallStatusBanner.style.display = 'block';
+                 if(resultsPlaceholder) resultsPlaceholder.style.display = 'none'; // Hide placeholder on error
+                 resultsMainBox.style.display = 'none';
+                stopPollingAndReset();
             } else {
                 currentTaskId = data.task_id;
-                resultsLog.textContent = `Task started with ID: ${currentTaskId}\nPolling for status...`;
+                // Show placeholder initially
+                resultsDetailsContainer.innerHTML = ''; // Clear just in case
+                if(resultsPlaceholder) resultsPlaceholder.style.display = 'block';
+                resultsPlaceholder.textContent = `Task started with ID: ${currentTaskId}. Polling for status...`;
+                resultsMainBox.style.display = 'block'; // Show the box containing the placeholder
+
                 taskStatusMessage.textContent = `Status: ${data.status}`;
-                // Start polling
-                if (pollIntervalId) clearInterval(pollIntervalId); // Clear any old interval
+                if (pollIntervalId) clearInterval(pollIntervalId);
                 pollIntervalId = setInterval(checkTaskStatus, pollIntervalMs);
-                checkTaskStatus(); // Immediate first check
+                checkTaskStatus();
             }
         } catch (error) {
             console.error('Network error starting task:', error);
-            resultsLog.textContent = 'Network error starting task.';
-            stopPollingAndReset(); // Reset UI on network error
+            overallStatusBanner.textContent = 'Network error starting task.';
+            overallStatusBanner.className = 'alert alert-danger';
+            overallStatusBanner.style.display = 'block';
+            if(resultsPlaceholder) resultsPlaceholder.style.display = 'none';
+             resultsMainBox.style.display = 'none';
+            stopPollingAndReset();
         }
     });
 
-    // Event listeners for modal buttons
-    modalSubmitButton.addEventListener('click', () => {
-        submitInput(modalInput.value);
-    });
+    // Event listeners for modal buttons (Keep As Is)
+    // ... modal listeners ...
+    modalSubmitButton.addEventListener('click', () => submitInput(modalInput.value));
+    modalInput.addEventListener('keypress', (event) => { if (event.key === 'Enter') { event.preventDefault(); submitInput(modalInput.value); } });
+    modalSubmitPasswordButton.addEventListener('click', () => { submitInput(modalPasswordInput.value); modalPasswordInput.value = ''; });
+    modalPasswordInput.addEventListener('keypress', (event) => { if (event.key === 'Enter') { event.preventDefault(); submitInput(modalPasswordInput.value); modalPasswordInput.value = ''; } });
+    modalConfirmYesButton.addEventListener('click', () => submitInput('yes'));
+    modalConfirmNoButton.addEventListener('click', () => submitInput('no'));
 
-    modalInput.addEventListener('keypress', (event) => {
-        if (event.key === 'Enter') {
-             event.preventDefault(); // Prevent potential form submission if modal is inside one
-             submitInput(modalInput.value);
-        }
-    });
-
-     modalSubmitPasswordButton.addEventListener('click', () => {
-        submitInput(modalPasswordInput.value);
-        modalPasswordInput.value = ''; // Clear password field after submission attempt
-    });
-
-     modalPasswordInput.addEventListener('keypress', (event) => {
-        if (event.key === 'Enter') {
-             event.preventDefault();
-             submitInput(modalPasswordInput.value);
-             modalPasswordInput.value = '';
-        }
-    });
-
-    modalConfirmYesButton.addEventListener('click', () => {
-        submitInput('yes');
-    });
-
-    modalConfirmNoButton.addEventListener('click', () => {
-        submitInput('no'); // Or maybe send a specific "cancel" signal? For now, 'no'.
-    });
 
 </script>
 {% endblock %}

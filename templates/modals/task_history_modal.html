@@ -1,64 +1,167 @@
-<!-- START OF FILE: templates/modals/task_history_modal.html -->
-
-<!-- Task History Modal -->
+<!-- START OF FILE: modals/task_history_modal.html -->
 <div class="modal fade" id="taskHistoryModal" tabindex="-1" aria-labelledby="taskHistoryModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable"> {# Large and scrollable modal #}
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="taskHistoryModalLabel">Previous Task History</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        {# Check if task_history exists and has items #}
-        {# This fragment inherits variables from the template that includes it (dashboard.html) #}
-        {% if task_history and task_history|length > 0 %}
-            <ul class="list-group">
-                {% for task in task_history %}
-                    <li class="list-group-item">
-                        {# Task ID and Status on one line #}
-                        <div class="d-flex w-100 justify-content-between mb-2">
-                            <h6 class="mb-0">Task ID: <code class="user-select-all">{{ task.id | default('N/A') }}</code></h6>
-                            {# Status Badges #}
-                           {% if task.status == 'Success' %}
-                               <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Success</span>
-                           {% elif task.status == 'Failure' %}
-                               <span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Failure</span>
-                           {% elif task.status == 'Cancelled' %}
-                                <span class="badge bg-warning text-dark"><i class="fas fa-ban me-1"></i>Cancelled</span>
-                           {% else %}
-                               <span class="badge bg-secondary"><i class="fas fa-question-circle me-1"></i>{{ task.status | default('Unknown') }}</span>
-                           {% endif %}
-                        </div>
-
-                        {# Prompt #}
-                        <p class="mb-1"><strong>Initial Prompt:</strong></p>
-                        <blockquote class="blockquote blockquote-sm bg-light p-2 rounded mb-2">
-                           <small>{{ task.prompt | default('No prompt recorded') | truncate(250) }}</small> {# Truncate long prompts #}
-                        </blockquote>
-
-                        {# Timestamp #}
-                        <p class="mb-0"><small class="text-muted">Timestamp: {{ task.timestamp | default('N/A') }}</small></p>
-
-                        {# Optional: Link to detailed logs if path is available #}
-                        {# {% if task.log_path %}
-                        # <a href="/logs/{{ task.log_path }}" target="_blank" class="btn btn-sm btn-outline-secondary mt-2">View Detail Log</a>
-                        # {% endif %} #}
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            {# Message when no history is found #}
-            <div class="alert alert-info" role="alert">
-              No previous task history found or provided.
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="taskHistoryModalLabel"><i class="fas fa-history me-2"></i>Previous Task History</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-        {% endif %}
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- End Task History Modal -->
+            <div class="modal-body">
+                {% if task_history %}
+                    <div class="list-group">
+                        {% for task in task_history %}
+                            <div class="list-group-item list-group-item-action flex-column align-items-start mb-2 shadow-sm">
+                                <div class="d-flex w-100 justify-content-between mb-2">
+                                    {# Task ID #}
+                                    <h6 class="mb-0 text-break">Task ID: <code class="user-select-all text-danger">{{ task.id | default('N/A') }}</code></h6>
+                                    {# Status Badges - Using lowercase comparison #}
+                                    <div> {# Wrap badges and button #}
+                                        {% set status_lower = task.status | lower if task.status else 'unknown' %}
+                                        {% if 'success' in status_lower or 'complete' in status_lower %}
+                                            <span class="badge bg-success me-2"><i class="fas fa-check-circle me-1"></i>{{ task.status | default('Success') }}</span>
+                                        {% elif 'fail' in status_lower or 'error' in status_lower %}
+                                            <span class="badge bg-danger me-2"><i class="fas fa-times-circle me-1"></i>{{ task.status | default('Failure') }}</span>
+                                        {% elif 'cancel' in status_lower %}
+                                            <span class="badge bg-warning text-dark me-2"><i class="fas fa-ban me-1"></i>{{ task.status | default('Cancelled') }}</span>
+                                        {% elif 'incomplete' in status_lower %}
+                                            <span class="badge bg-secondary me-2"><i class="fas fa-exclamation-circle me-1"></i>{{ task.status | default('Incomplete') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-info me-2"><i class="fas fa-question-circle me-1"></i>{{ task.status | default('Unknown') }}</span>
+                                        {% endif %}
 
-<!-- END OF FILE: templates/modals/task_history_modal.html -->
+                                        {# --- NEW: View Output Button --- #}
+                                        <button type="button" class="btn btn-sm btn-outline-info view-output-log"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#outputLogModal"
+                                                data-task-id="{{ task.id | e }}"> {# Use 'e' filter for HTML attribute safety #}
+                                            <i class="fas fa-file-alt me-1"></i> Output
+                                        </button>
+                                        {# --- END NEW --- #}
+                                    </div>
+                                </div>
+                                <p class="mb-1"><strong>Initial Prompt:</strong> {{ task.prompt | default('N/A') }}</p>
+                                {# Display commands only if needed/desired
+                                {% if task.commands %}
+                                    <div class="mb-1">
+                                        <strong>Commands Attempted:</strong>
+                                        <ul class="list-unstyled ms-3 small">
+                                            {% for cmd in task.commands %}
+                                                <li><code>{{ cmd }}</code></li>
+                                            {% else %}
+                                                <li><em>No commands found or parsed.</em></li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                {% else %}
+                                    <p class="mb-1 small"><em>No commands found or parsed.</em></p>
+                                {% endif %}
+                                #}
+                                <small class="text-muted">
+                                    Timestamp:
+                                    {% if task.timestamp %}
+                                        {{ task.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}
+                                    {% else %}
+                                        Timestamp unavailable
+                                    {% endif %}
+                                </small>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted">No task history found.</p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# --- NEW: Output Log Modal Structure (Place AFTER the history modal) --- #}
+<div class="modal fade" id="outputLogModal" tabindex="-1" aria-labelledby="outputLogModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false"> {# Static backdrop prevents closing on click outside #}
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="outputLogModalLabel">Output Log for Task: <code class="user-select-all text-danger" id="outputLogTaskId">...</code></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-light"> {# Light background for contrast #}
+                <pre><code id="outputLogContent" style="white-space: pre-wrap; word-wrap: break-word; font-size: 0.85em;">Loading log content...</code></pre>
+            </div>
+            <div class="modal-footer">
+                 <span id="outputLogError" class="text-danger me-auto"></span> {# Area for error messages #}
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{# --- END NEW --- #}
+
+
+{# --- NEW: JavaScript for Output Log Modal --- #}
+{# Place this script block at the end of this file or in your main JS file #}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const outputLogModalElement = document.getElementById('outputLogModal');
+    if (outputLogModalElement) {
+        const outputLogContentEl = document.getElementById('outputLogContent');
+        const outputLogTaskIdEl = document.getElementById('outputLogTaskId');
+        const outputLogErrorEl = document.getElementById('outputLogError');
+
+        outputLogModalElement.addEventListener('show.bs.modal', async function (event) {
+            // Button that triggered the modal
+            const button = event.relatedTarget;
+            // Extract task ID from data-* attribute
+            const taskId = button.getAttribute('data-task-id');
+
+            // Update the modal's title and reset content/error
+            outputLogTaskIdEl.textContent = taskId || 'Unknown';
+            outputLogContentEl.textContent = 'Loading log content...';
+            outputLogErrorEl.textContent = ''; // Clear previous errors
+
+            if (!taskId) {
+                outputLogContentEl.textContent = 'Error: Task ID not provided.';
+                outputLogErrorEl.textContent = 'Could not identify the task.';
+                return;
+            }
+
+            try {
+                // Construct the URL for the backend endpoint
+                const url = `/task_output/${encodeURIComponent(taskId)}`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    let errorMsg = `Error: ${response.status} ${response.statusText}`;
+                    try { // Try to get more specific error from response body
+                        const errorData = await response.json();
+                        if (errorData && errorData.error) {
+                            errorMsg = `Error: ${errorData.error}`;
+                        }
+                    } catch (e) { /* Ignore if response body is not JSON */ }
+                    throw new Error(errorMsg);
+                }
+
+                // Assuming the backend returns plain text content
+                const logContent = await response.text();
+
+                if (logContent === null || logContent.trim() === '') {
+                     outputLogContentEl.textContent = 'Log file is empty or could not be read.';
+                } else {
+                     outputLogContentEl.textContent = logContent;
+                }
+
+            } catch (error) {
+                console.error('Error fetching output log:', error);
+                const displayError = error.message || 'Failed to load log content. Check server logs.';
+                outputLogContentEl.textContent = `Error loading log:\n${displayError}`;
+                outputLogErrorEl.textContent = displayError; // Show error in footer too
+            }
+        });
+    } else {
+        console.warn('Output Log Modal element not found.');
+    }
+});
+</script>
+{# --- END NEW --- #}
+<!-- END OF FILE: modals/task_history_modal.html -->
