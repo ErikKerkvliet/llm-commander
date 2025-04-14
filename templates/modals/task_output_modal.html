@@ -1,0 +1,85 @@
+{# --- NEW: Output Log Modal Structure (Place AFTER the history modal) --- #}
+<div class="modal fade" id="outputLogModal" tabindex="-1" aria-labelledby="outputLogModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false"> {# Static backdrop prevents closing on click outside #}
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="outputLogModalLabel">Output Log for Task: <code class="user-select-all text-danger" id="outputLogTaskId">...</code></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-light"> {# Light background for contrast #}
+                <pre><code id="outputLogContent" style="white-space: pre-wrap; word-wrap: break-word; font-size: 0.85em;">Loading log content...</code></pre>
+            </div>
+            <div class="modal-footer">
+                 <span id="outputLogError" class="text-danger me-auto"></span> {# Area for error messages #}
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{# --- END NEW --- #}
+
+
+{# --- NEW: JavaScript for Output Log Modal --- #}
+{# Place this script block at the end of this file or in your main JS file #}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const outputLogModalElement = document.getElementById('outputLogModal');
+    if (outputLogModalElement) {
+        const outputLogContentEl = document.getElementById('outputLogContent');
+        const outputLogTaskIdEl = document.getElementById('outputLogTaskId');
+        const outputLogErrorEl = document.getElementById('outputLogError');
+
+        outputLogModalElement.addEventListener('show.bs.modal', async function (event) {
+            // Button that triggered the modal
+            const button = event.relatedTarget;
+            // Extract task ID from data-* attribute
+            const taskId = button.getAttribute('data-task-id');
+
+            // Update the modal's title and reset content/error
+            outputLogTaskIdEl.textContent = taskId || 'Unknown';
+            outputLogContentEl.textContent = 'Loading log content...';
+            outputLogErrorEl.textContent = ''; // Clear previous errors
+
+            if (!taskId) {
+                outputLogContentEl.textContent = 'Error: Task ID not provided.';
+                outputLogErrorEl.textContent = 'Could not identify the task.';
+                return;
+            }
+
+            try {
+                // Construct the URL for the backend endpoint
+                const url = `/task_output/${encodeURIComponent(taskId)}`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    let errorMsg = `Error: ${response.status} ${response.statusText}`;
+                    try { // Try to get more specific error from response body
+                        const errorData = await response.json();
+                        if (errorData && errorData.error) {
+                            errorMsg = `Error: ${errorData.error}`;
+                        }
+                    } catch (e) { /* Ignore if response body is not JSON */ }
+                    throw new Error(errorMsg);
+                }
+
+                // Assuming the backend returns plain text content
+                const logContent = await response.text();
+
+                if (logContent === null || logContent.trim() === '') {
+                     outputLogContentEl.textContent = 'Log file is empty or could not be read.';
+                } else {
+                     outputLogContentEl.textContent = logContent;
+                }
+
+            } catch (error) {
+                console.error('Error fetching output log:', error);
+                const displayError = error.message || 'Failed to load log content. Check server logs.';
+                outputLogContentEl.textContent = `Error loading log:\n${displayError}`;
+                outputLogErrorEl.textContent = displayError; // Show error in footer too
+            }
+        });
+    } else {
+        console.warn('Output Log Modal element not found.');
+    }
+});
+</script>

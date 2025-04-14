@@ -1,4 +1,4 @@
-<!-- START OF FILE: modals/task_history_modal.html -->
+<!-- modals/task_history_modal.html -->
 <div class="modal fade" id="taskHistoryModal" tabindex="-1" aria-labelledby="taskHistoryModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
@@ -96,72 +96,3 @@
         </div>
     </div>
 </div>
-{# --- END NEW --- #}
-
-
-{# --- NEW: JavaScript for Output Log Modal --- #}
-{# Place this script block at the end of this file or in your main JS file #}
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const outputLogModalElement = document.getElementById('outputLogModal');
-    if (outputLogModalElement) {
-        const outputLogContentEl = document.getElementById('outputLogContent');
-        const outputLogTaskIdEl = document.getElementById('outputLogTaskId');
-        const outputLogErrorEl = document.getElementById('outputLogError');
-
-        outputLogModalElement.addEventListener('show.bs.modal', async function (event) {
-            // Button that triggered the modal
-            const button = event.relatedTarget;
-            // Extract task ID from data-* attribute
-            const taskId = button.getAttribute('data-task-id');
-
-            // Update the modal's title and reset content/error
-            outputLogTaskIdEl.textContent = taskId || 'Unknown';
-            outputLogContentEl.textContent = 'Loading log content...';
-            outputLogErrorEl.textContent = ''; // Clear previous errors
-
-            if (!taskId) {
-                outputLogContentEl.textContent = 'Error: Task ID not provided.';
-                outputLogErrorEl.textContent = 'Could not identify the task.';
-                return;
-            }
-
-            try {
-                // Construct the URL for the backend endpoint
-                const url = `/task_output/${encodeURIComponent(taskId)}`;
-                const response = await fetch(url);
-
-                if (!response.ok) {
-                    let errorMsg = `Error: ${response.status} ${response.statusText}`;
-                    try { // Try to get more specific error from response body
-                        const errorData = await response.json();
-                        if (errorData && errorData.error) {
-                            errorMsg = `Error: ${errorData.error}`;
-                        }
-                    } catch (e) { /* Ignore if response body is not JSON */ }
-                    throw new Error(errorMsg);
-                }
-
-                // Assuming the backend returns plain text content
-                const logContent = await response.text();
-
-                if (logContent === null || logContent.trim() === '') {
-                     outputLogContentEl.textContent = 'Log file is empty or could not be read.';
-                } else {
-                     outputLogContentEl.textContent = logContent;
-                }
-
-            } catch (error) {
-                console.error('Error fetching output log:', error);
-                const displayError = error.message || 'Failed to load log content. Check server logs.';
-                outputLogContentEl.textContent = `Error loading log:\n${displayError}`;
-                outputLogErrorEl.textContent = displayError; // Show error in footer too
-            }
-        });
-    } else {
-        console.warn('Output Log Modal element not found.');
-    }
-});
-</script>
-{# --- END NEW --- #}
-<!-- END OF FILE: modals/task_history_modal.html -->
