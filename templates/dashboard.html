@@ -46,13 +46,47 @@
                  </div>
             </div>
         </div>
+
+        <!-- Current Earnings Card -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <i class="fas fa-dollar-sign me-2"></i>Current Earnings
+                </div>
+                <div class="card-body text-center">
+                    <h5 class="card-title display-5 fw-bold text-success">$1,234.56</h5> {# Placeholder value - replace with real data if available #}
+                    <p class="card-text text-muted mb-3">Estimated earnings as of {{ today_date }}</p>
+                    <!-- Button to trigger earnings modal -->
+                    <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#earningsModal">
+                        <i class="fas fa-info-circle me-1"></i> How to Access Funds
+                    </button>
+                </div>
+                <div class="card-footer text-muted">
+                    <small>Updates periodically. Contact finance for details.</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- *** Include the Financial History Card *** -->
+        {% include 'cards/financial_history_card.html' %}
+
     </div>
 
     {# You could add more rows/cards for other dashboard elements #}
 
 </div> <!-- End of dashboard-panel -->
 
-<!-- *** Include the Modal HTML from the separate file *** -->
+<!-- *** Include the Task History Modal *** -->
 {% include 'modals/task_history_modal.html' %}
 
+<!-- *** Include the Earnings Modal *** -->
+{% include 'modals/earnings_modal.html' %}
+
+{% endblock %}
+
+
+{% block scripts_extra %}
+    {# The financial chart JS is now in the 'includes/financial_history_card.html' file. #}
+    {# Keep any other scripts specific to the dashboard or modals here. #}
+    {# Example: If the modal scripts were here, they would remain. #}
 {% endblock %}
