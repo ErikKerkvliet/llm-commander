@@ -1,0 +1,79 @@
+<!-- templates/modals/earnings_modal.html -->
+<!-- NEW FILE -->
+<div class="modal fade" id="earningsModal" tabindex="-1" aria-labelledby="earningsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"> {# Larger, centered, scrollable #}
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white"> {# Header with background color #}
+                <h5 class="modal-title" id="earningsModalLabel"><i class="fas fa-wallet me-2"></i>Accessing Your Funds - Explanation</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Container for dynamic content -->
+                <div id="earningsModalContent">
+                    <p class="text-center text-muted">
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        Loading explanation...
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                 <span id="earningsModalError" class="text-danger me-auto small"></span> {# Area for error messages #}
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript for Earnings Modal Loading -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const earningsModalElement = document.getElementById('earningsModal');
+    const earningsContentElement = document.getElementById('earningsModalContent');
+    const earningsErrorElement = document.getElementById('earningsModalError');
+
+    if (earningsModalElement && earningsContentElement && earningsErrorElement) {
+        earningsModalElement.addEventListener('show.bs.modal', async function (event) {
+            // Reset content and error message
+            earningsContentElement.innerHTML = `
+                <p class="text-center text-muted">
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    Loading explanation...
+                </p>`;
+            earningsErrorElement.textContent = ''; // Clear previous errors
+
+            try {
+                // Fetch content from the new backend endpoint
+                const response = await fetch('/get_earnings_info');
+
+                if (!response.ok) {
+                    let errorMsg = `Error: ${response.status} ${response.statusText}`;
+                     try { // Try to get more specific error from response body
+                        const errorData = await response.json();
+                        if (errorData && errorData.error) {
+                            errorMsg = `Error: ${errorData.error}`;
+                        }
+                    } catch (e) { /* Ignore if response body is not JSON */ }
+                    throw new Error(errorMsg);
+                }
+
+                const data = await response.json(); // Expecting JSON response with html_content
+
+                if (data && data.html_content) {
+                    // Successfully fetched HTML content
+                    earningsContentElement.innerHTML = data.html_content;
+                } else {
+                     throw new Error("Invalid response format received from server.");
+                }
+
+            } catch (error) {
+                console.error('Error fetching earnings info:', error);
+                const displayError = error.message || 'Failed to load explanation. Please try again later.';
+                earningsContentElement.innerHTML = `<p class="text-danger text-center">${displayError}</p>`;
+                earningsErrorElement.textContent = displayError; // Show error in footer
+            }
+        });
+    } else {
+        console.warn('One or more elements for the Earnings Modal were not found.');
+    }
+});
+</script>

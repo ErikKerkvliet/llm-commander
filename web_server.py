@@ -1,3 +1,4 @@
+# llm-commander-master/web_server.py
 import os
 import logging
 import socket
@@ -6,7 +7,7 @@ import getpass
 import uuid # Import uuid
 import threading # Import threading
 import time # Import time
-from datetime import datetime
+from datetime import datetime, date # Added date
 from logging.handlers import RotatingFileHandler # Use rotating file handler
 from concurrent.futures import ThreadPoolExecutor # Alternative for managing threads
 
@@ -22,6 +23,9 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired
 from werkzeug.security import generate_password_hash, check_password_hash
+# Added json for the graph data
+import json
+
 
 # Import configuration and the main app class
 from config import settings
@@ -191,6 +195,11 @@ def dashboard():
     current_main_task = "Example: Deploy web application"
     current_step = "Example: Waiting for user confirmation"
 
+    # --- NEW: Generate Sample Graph Data ---
+    # In a real application, this data would come from a database or analytics service
+    graph_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"]
+    graph_data = [150, 220, 180, 250, 300, 280, 310, 330]
+
     app.logger.info(f"Serving Dashboard Tab to user: {current_user.id}")
     return render_template(
         'dashboard.html',
@@ -199,7 +208,37 @@ def dashboard():
         active_tab="dashboard",
         main_task=current_main_task, # This is still placeholder
         current_task=current_step,  # This is still placeholder
+        today_date=date.today().strftime("%Y-%m-%d"), # Add today's date for the earnings card
+        # Pass graph data to the template (convert to JSON for JS)
+        graph_labels=json.dumps(graph_labels),
+        graph_data=json.dumps(graph_data)
     )
+
+# --- NEW: Route for Earnings Modal Content ---
+@app.route('/get_earnings_info')
+@login_required
+def get_earnings_info():
+    """Provides the HTML content for the earnings explanation modal."""
+    user_id = current_user.id
+    app.logger.info(f"User '{user_id}' requested earnings info modal content.")
+
+    # Static content for this example. Could be dynamic in a real app.
+    explanation_html = """
+    <h4>Accessing Your Funds</h4>
+    <p>Thank you for your contributions! Currently, fund access is processed manually by our finance team to ensure security and compliance. Please follow these steps:</p>
+    <ol>
+        <li>Navigate to the internal 'Finance Portal' section (link available on the main intranet page).</li>
+        <li>Submit a 'Withdrawal Request' form.</li>
+        <li>Specify the exact amount you wish to withdraw (minimum $50).</li>
+        <li>Ensure your designated payout bank account details are up-to-date in your profile before submitting.</li>
+        <li>You will receive a confirmation email once the request is submitted.</li>
+    </ol>
+    <p><strong>Processing Time:</strong> Withdrawals are typically processed within <strong>3-5 business days</strong> after submission and approval.</p>
+    <p class="text-muted"><small>Please note that transaction fees may apply depending on your bank and location. Contact the finance team via the portal for any specific queries.</small></p>
+    """
+    # Return as JSON for easier handling in frontend JS
+    return jsonify({"html_content": explanation_html})
+
 
 # --- API Endpoints for Asynchronous Task Handling ---
 

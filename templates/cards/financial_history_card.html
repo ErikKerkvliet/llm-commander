@@ -1,0 +1,98 @@
+<!-- templates/includes/financial_history_card.html -->
+<div class="col-md-6 mb-4">
+    <div class="card h-100">
+        <div class="card-header">
+            <i class="fas fa-chart-line me-2"></i>Financial History (Example)
+        </div>
+        <div class="card-body">
+            <canvas id="financialChart" style="max-height: 250px;"></canvas> {# Canvas for Chart.js #}
+        </div>
+         <div class="card-footer text-muted">
+            <small>Illustrative data for the last few months.</small>
+         </div>
+    </div>
+</div>
+
+{# Script specific to initializing this chart.
+   It relies on graph_labels and graph_data being available in the parent template's context.
+#}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // --- Financial Chart Initialization ---
+    const financialChartCanvas = document.getElementById('financialChart');
+    if (financialChartCanvas) {
+        const ctx = financialChartCanvas.getContext('2d');
+
+        // Get data passed from the parent Flask template (e.g., dashboard.html)
+        // Use |tojson|safe filters for security and correct parsing
+        let chartLabels = [];
+        let chartDataPoints = [];
+        try {
+            chartLabels = JSON.parse({{ graph_labels|tojson|safe }});
+            chartDataPoints = JSON.parse({{ graph_data|tojson|safe }});
+        } catch (e) {
+             console.error("Error parsing chart data passed from Flask:", e);
+             // Optionally display an error message on the chart canvas or card footer
+             const cardBody = financialChartCanvas.closest('.card-body');
+             if (cardBody) {
+                 cardBody.innerHTML = '<p class="text-danger text-center small">Error loading chart data.</p>';
+             }
+             return; // Stop initialization if data is bad
+        }
+
+
+        const financialChart = new Chart(ctx, {
+            type: 'line', // Type of chart (line, bar, pie, etc.)
+            data: {
+                labels: chartLabels, // Labels for the X-axis
+                datasets: [{
+                    label: 'Monthly Revenue ($)', // Legend label for this dataset
+                    data: chartDataPoints,        // Data points for the Y-axis
+                    borderColor: 'rgb(54, 162, 235)', // Line color (Bootstrap primary blue)
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)', // Optional fill color
+                    tension: 0.1, // Makes the line slightly curved
+                    fill: true     // Enable fill below the line
+                }]
+            },
+            options: {
+                responsive: true, // Make the chart responsive
+                maintainAspectRatio: false, // Allow chart to fill container height better
+                scales: {
+                    y: {
+                        beginAtZero: true, // Start Y-axis at 0
+                         ticks: {
+                            // Format Y-axis ticks as currency
+                            callback: function(value, index, values) {
+                                return '$' + value.toLocaleString();
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true, // Show the legend
+                        position: 'top',
+                    },
+                    tooltip: {
+                         callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += '$' + context.parsed.y.toLocaleString();
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        // This warning might be less useful now, as the script is tied to the HTML
+        // console.warn("Financial chart canvas element not found within its include.");
+    }
+});
+</script>
