@@ -13,16 +13,23 @@
         <!-- Current Focus Card -->
         <div class="col-md-6 mb-4">
             <div class="card h-100">
-                <div class="card-header">
-                    <i class="fas fa-crosshairs me-2"></i>Current Focus
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-crosshairs me-2"></i>Current Focus</span>
+                    <!-- Status Badge - Updated by JS -->
+                    <span id="dashboard-task-status" class="badge bg-secondary ms-2">Loading...</span>
                 </div>
                 <div class="card-body">
                     <h5 class="card-title">Main Task</h5>
-                    <p class="card-text text-muted">{{ main_task or "No main task currently active." }}</p>
+                    <!-- Main Task Placeholder - Updated by JS -->
+                    <p id="dashboard-main-task" class="card-text text-muted" style="min-height: 4em; overflow-y: auto; max-height: 8em; background-color: #f8f9fa; padding: 0.5rem; border-radius: 0.2rem;">Loading...</p>
 
-                    <h5 class="card-title mt-4">Current Task</h5>
-                    <p class="card-text text-muted">{{ current_task or "Awaiting next step or task start." }}</p>
+                    <h5 class="card-title mt-4">Current Step</h5>
+                    <!-- Current Step Placeholder - Updated by JS -->
+                    <p id="dashboard-current-step" class="card-text text-muted" style="min-height: 2em;">Loading...</p>
                 </div>
+                 <div class="card-footer text-muted">
+                     <small>Updates automatically every few seconds.</small>
+                 </div>
             </div>
         </div>
 
@@ -86,7 +93,92 @@
 
 
 {% block scripts_extra %}
-    {# The financial chart JS is now in the 'includes/financial_history_card.html' file. #}
-    {# Keep any other scripts specific to the dashboard or modals here. #}
-    {# Example: If the modal scripts were here, they would remain. #}
+{# --- Dashboard Polling Script --- #}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const mainTaskEl = document.getElementById('dashboard-main-task');
+        const currentStepEl = document.getElementById('dashboard-current-step');
+        const statusBadgeEl = document.getElementById('dashboard-task-status');
+        const pollIntervalMs = 5000; // Poll every 5 seconds
+        let pollIntervalId = null;
+
+        function updateStatusBadge(statusText) {
+            if (!statusBadgeEl) return;
+
+            let badgeClass = 'bg-secondary'; // Default
+            let displayText = statusText || 'Unknown';
+            let statusLower = displayText.toLowerCase();
+
+            if (statusLower.includes('complete') || statusLower.includes('success')) {
+                badgeClass = 'bg-success';
+            } else if (statusLower.includes('fail')) {
+                badgeClass = 'bg-danger';
+            } else if (statusLower.includes('running') || statusLower.includes('resuming') || statusLower.includes('started')) {
+                badgeClass = 'bg-primary';
+            } else if (statusLower.includes('awaiting') || statusLower.includes('waiting')) {
+                badgeClass = 'bg-warning text-dark';
+            } else if (statusLower.includes('idle')) {
+                 badgeClass = 'bg-secondary';
+            } else if (statusLower.includes('cancel')) {
+                 badgeClass = 'bg-info text-dark';
+            }
+            // Add more cases as needed based on possible status strings
+
+            statusBadgeEl.className = `badge ms-2 ${badgeClass}`; // Reset and apply new class
+            statusBadgeEl.textContent = displayText.replace("Awaitin ", "Awaiting"); // Fix typo if needed
+        }
+
+        async function pollDashboardStatus() {
+            if (!mainTaskEl || !currentStepEl || !statusBadgeEl) {
+                console.error("Dashboard elements not found, stopping poll.");
+                if (pollIntervalId) clearInterval(pollIntervalId);
+                return;
+            }
+
+            try {
+                const response = await fetch('/dashboard_status');
+                if (!response.ok) {
+                     console.error(`Dashboard status poll failed: ${response.status} ${response.statusText}`);
+                     // Optionally update UI to show an error state
+                     mainTaskEl.textContent = 'Error loading status.';
+                     currentStepEl.textContent = `(${response.status})`;
+                     updateStatusBadge('Error');
+                     return; // Don't reschedule poll on server error? Or maybe keep polling? Let's keep polling.
+                }
+
+                const data = await response.json();
+
+                if (data.active) {
+                    mainTaskEl.textContent = data.main_task || '(No main task specified)';
+                    currentStepEl.textContent = data.current_step || '(No current step specified)';
+                    updateStatusBadge(data.status || 'Active');
+                } else {
+                    mainTaskEl.textContent = data.main_task || 'No active task.'; // Display idle message
+                    currentStepEl.textContent = data.current_step || 'Idle.';
+                    updateStatusBadge(data.status || 'Idle');
+                }
+
+            } catch (error) {
+                console.error('Error during dashboard status poll:', error);
+                mainTaskEl.textContent = 'Network error fetching status.';
+                currentStepEl.textContent = 'Error';
+                updateStatusBadge('Error');
+                // Decide whether to stop polling on network error
+                 // if (pollIntervalId) clearInterval(pollIntervalId);
+            }
+        }
+
+        // Start polling
+        pollDashboardStatus(); // Initial call
+        pollIntervalId = setInterval(pollDashboardStatus, pollIntervalMs);
+
+        // Optional: Clear interval if the page unloads (basic version)
+        window.addEventListener('beforeunload', () => {
+            if (pollIntervalId) clearInterval(pollIntervalId);
+        });
+    });
+</script>
+
+{# The financial chart JS is now in the 'includes/financial_history_card.html' file. #}
+{# Keep any other scripts specific to the dashboard or modals here. #}
 {% endblock %}
