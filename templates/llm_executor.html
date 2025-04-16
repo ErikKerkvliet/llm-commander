@@ -212,23 +212,21 @@
     let pollIntervalId = null;
     const pollIntervalMs = 2000;
 
+    // Element references (Keep As Is)
     const executeForm = document.getElementById('execute-form');
     const executeButton = document.getElementById('execute-button');
     const executeSpinner = document.getElementById('execute-spinner');
     const taskStatusMessage = document.getElementById('task-status-message');
-    // --- Updated references for results area ---
     const resultsArea = document.getElementById('results-area');
     const overallStatusBanner = document.getElementById('overall-status-banner');
-    // --- New references ---
     const resultsMainBox = document.getElementById('results-main-box');
     const overallStatusHeading = document.getElementById('overall-status-heading');
-    // --- ---
     const resultsDetailsContainer = document.getElementById('results-details-container');
     const resultsPlaceholder = document.getElementById('results-placeholder');
 
     // Modal elements (Keep As Is)
-    // ... modal element references remain the same ...
-    const inputModal = new bootstrap.Modal(document.getElementById('inputModal'), { keyboard: false, backdrop: 'static' });
+    const inputModalElement = document.getElementById('inputModal'); // Get the element
+    const inputModal = new bootstrap.Modal(inputModalElement, { keyboard: false, backdrop: 'static' });
     const modalPromptText = document.getElementById('modalPromptText');
     const modalInputArea = document.getElementById('modalInputArea');
     const modalInput = document.getElementById('modalInput');
@@ -240,9 +238,9 @@
     const modalConfirmNoButton = document.getElementById('modalConfirmNo');
     const modalSubmitPasswordButton = document.getElementById('modalSubmitPassword');
 
-
-    // --- Updated displayResults function ---
+    // --- displayResults function (Keep As Is) ---
     function displayResults(data) {
+        // ... (function content remains the same) ...
         // Clear previous results and hide/reset elements
         overallStatusBanner.innerHTML = '';
         overallStatusBanner.className = 'alert'; // Reset classes
@@ -372,7 +370,7 @@
         }
     }
 
-    // Function to stop polling and reset UI (Keep As Is)
+    // --- stopPollingAndReset function (Keep As Is) ---
     function stopPollingAndReset() {
         if (pollIntervalId) {
             clearInterval(pollIntervalId);
@@ -382,12 +380,69 @@
         executeButton.disabled = false;
         executeSpinner.style.display = 'none';
         taskStatusMessage.textContent = '';
-        inputModal.hide();
-        // Do NOT hide resultsMainBox here, keep results visible
+        // Ensure modal is hidden if it was open
+        const existingModalInstance = bootstrap.Modal.getInstance(inputModalElement);
+        if (existingModalInstance) {
+             existingModalInstance.hide();
+        }
+        // Do NOT hide resultsMainBox here, keep results visible if they were generated
     }
 
-    // Function to check task status (Keep As Is)
-    // ... checkTaskStatus function remains the same ...
+    // --- NEW: Function to show the input modal ---
+    function showInputModal(taskId, promptText, inputType, taskStatus) {
+        console.log(`Modal triggered. Task: ${taskId}, Type: ${inputType}, Status: ${taskStatus}`);
+        // Set the global task ID if not already set (important for initial load)
+        if (!currentTaskId) {
+            currentTaskId = taskId;
+            executeButton.disabled = true; // Disable execute button if a task is active
+            executeSpinner.style.display = 'none'; // Ensure spinner isn't stuck
+             taskStatusMessage.textContent = `Status: ${taskStatus}`; // Show current status
+        }
+
+        // Update modal content
+        modalPromptText.textContent = promptText || '(No prompt text provided)';
+        modalInputArea.style.display = 'none';
+        modalPasswordArea.style.display = 'none';
+        modalConfirmationArea.style.display = 'none';
+        modalSubmitButton.style.display = 'none';
+        modalConfirmYesButton.style.display = 'none';
+        modalConfirmNoButton.style.display = 'none';
+        modalSubmitPasswordButton.style.display = 'none';
+
+        if (inputType === 'confirmation') {
+            document.getElementById('inputModalLabel').textContent = 'Confirmation Required';
+            modalConfirmationArea.style.display = 'block';
+            modalConfirmYesButton.style.display = 'inline-block';
+            modalConfirmNoButton.style.display = 'inline-block';
+        } else if (inputType === 'password') {
+            document.getElementById('inputModalLabel').textContent = 'Password Required';
+            modalPasswordArea.style.display = 'block';
+            modalSubmitPasswordButton.style.display = 'inline-block';
+            modalPasswordInput.value = '';
+            // Delay focus slightly until modal is fully shown
+            setTimeout(() => modalPasswordInput.focus(), 500);
+        } else { // Default to text input
+            document.getElementById('inputModalLabel').textContent = 'Input Required';
+            modalInputArea.style.display = 'block';
+            modalSubmitButton.style.display = 'inline-block';
+            modalInput.value = '';
+            // Delay focus slightly until modal is fully shown
+             setTimeout(() => modalInput.focus(), 500);
+        }
+
+        // Show modal (Use instance created earlier)
+        const modalInstance = bootstrap.Modal.getInstance(inputModalElement);
+        if (modalInstance && !inputModalElement.classList.contains('show')) {
+            inputModal.show();
+        } else if (!modalInstance) {
+            console.error("Modal instance couldn't be retrieved!");
+             // Fallback: Try creating and showing again, though this shouldn't be needed
+             new bootstrap.Modal(inputModalElement).show();
+        }
+    }
+
+
+    // --- checkTaskStatus function (MODIFIED TO CALL showInputModal) ---
     async function checkTaskStatus() {
         if (!currentTaskId) return;
 
@@ -395,17 +450,16 @@
         try {
             const response = await fetch(`/task_status/${currentTaskId}`);
             if (!response.ok) {
+                // ... (error handling remains the same) ...
                 console.error(`Error fetching status: ${response.status}`);
                 const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
                 taskStatusMessage.textContent = `Error: ${errorData.message || response.status}`;
                  if (response.status === 404) {
                      console.warn("Task ID not found during polling. Stopping.");
-                     // Don't modify results area here, just stop
                      stopPollingAndReset();
                  }
                  if (response.status === 403) {
                     console.warn("Access denied polling task status. Stopping.");
-                    // Don't modify results area here, just stop
                     stopPollingAndReset();
                 }
                 return;
@@ -413,79 +467,51 @@
 
             const data = await response.json();
             console.log("Status data:", data);
-            taskStatusMessage.textContent = `Status: ${data.status}`;
+            taskStatusMessage.textContent = `Status: ${data.status}`; // Display the current status
 
             if (data.status.toLowerCase() === 'complete' || data.status.toLowerCase() === 'failed') {
-                taskStatusMessage.textContent = `Status: ${data.status}`;
                 if (data.result) {
-                    displayResults(data.result); // Update results area with final data
+                    displayResults(data.result);
                 } else {
-                     // Display minimal error message if result object is missing
-                     overallStatusBanner.textContent = `Task ${data.status}, but no final result data received.`;
-                     overallStatusBanner.classList.add('alert-warning');
-                     overallStatusBanner.style.display = 'block';
-                     resultsMainBox.style.display = 'none';
+                    overallStatusBanner.textContent = `Task ${data.status}, but no final result data received.`;
+                    overallStatusBanner.classList.add('alert-warning');
+                    overallStatusBanner.style.display = 'block';
+                    resultsMainBox.style.display = 'none';
                 }
-                stopPollingAndReset(); // Stop polling
+                stopPollingAndReset();
             } else if (data.prompt_needed) {
-                console.log("Input needed!");
-                 // Update modal content (same as before)
-                 modalPromptText.textContent = data.prompt_text || '(No prompt text provided)';
-                 modalInputArea.style.display = 'none';
-                 modalPasswordArea.style.display = 'none';
-                 modalConfirmationArea.style.display = 'none';
-                 modalSubmitButton.style.display = 'none';
-                 modalConfirmYesButton.style.display = 'none';
-                 modalConfirmNoButton.style.display = 'none';
-                 modalSubmitPasswordButton.style.display = 'none';
-
-                 if (data.input_type === 'confirmation') {
-                    document.getElementById('inputModalLabel').textContent = 'Confirmation Required';
-                    modalConfirmationArea.style.display = 'block';
-                    modalConfirmYesButton.style.display = 'inline-block';
-                    modalConfirmNoButton.style.display = 'inline-block';
-                } else if (data.input_type === 'password') {
-                     document.getElementById('inputModalLabel').textContent = 'Password Required';
-                    modalPasswordArea.style.display = 'block';
-                    modalSubmitPasswordButton.style.display = 'inline-block';
-                    modalPasswordInput.value = '';
-                    modalPasswordInput.focus();
-                } else {
-                     document.getElementById('inputModalLabel').textContent = 'Input Required';
-                    modalInputArea.style.display = 'block';
-                    modalSubmitButton.style.display = 'inline-block';
-                    modalInput.value = '';
-                    modalInput.focus();
-                }
-                 // Show modal (same as before)
-                 const modalElement = document.getElementById('inputModal');
-                 const modalInstance = bootstrap.Modal.getInstance(modalElement);
-                 if (!modalInstance || !modalElement.classList.contains('show')) {
-                     inputModal.show();
-                 }
+                // *** Call the dedicated function to show the modal ***
+                showInputModal(currentTaskId, data.prompt_text, data.input_type, data.status);
             } else {
-                 // Task is running, started, resuming - hide modal
-                 inputModal.hide();
-                 // Keep showing placeholder or previous results until final state
-                 if (resultsMainBox.style.display === 'none') { // Only show placeholder if nothing else is visible
-                     if(resultsPlaceholder) resultsPlaceholder.style.display = 'block';
+                // Task is running, started, resuming - ensure modal is hidden
+                const existingModalInstance = bootstrap.Modal.getInstance(inputModalElement);
+                 if (existingModalInstance && inputModalElement.classList.contains('show')) {
+                      existingModalInstance.hide();
                  }
+                // Keep showing placeholder or previous results until final state
+                if (resultsMainBox.style.display === 'none') {
+                    if(resultsPlaceholder) resultsPlaceholder.style.display = 'block';
+                }
             }
 
         } catch (error) {
             console.error('Error during polling:', error);
             taskStatusMessage.textContent = 'Polling Error';
-            // Consider stopping or showing error more permanently
         }
     }
 
-
-     // Function to submit input from the modal (Keep As Is)
-     // ... submitInput function remains the same ...
-     async function submitInput(inputValue) {
+    // --- submitInput function (Keep As Is) ---
+    async function submitInput(inputValue) {
+        // ... (function content remains the same) ...
         if (!currentTaskId) return;
         console.log(`Submitting input for ${currentTaskId}: ${inputValue.substring(0, 20)}...`);
-        inputModal.hide();
+
+        // Hide modal immediately
+        const modalInstance = bootstrap.Modal.getInstance(inputModalElement);
+         if (modalInstance) {
+             modalInstance.hide();
+         }
+
         taskStatusMessage.textContent = 'Submitting input...';
         try {
             const response = await fetch(`/provide_input/${currentTaskId}`, {
@@ -506,6 +532,8 @@
                  const data = await response.json();
                  console.log("Input submission response:", data);
                  taskStatusMessage.textContent = 'Input submitted, resuming...'; // Status updated by next poll
+                 // Optionally clear password field after submission
+                 if(modalPasswordInput) modalPasswordInput.value = '';
             }
         } catch (error) {
             console.error('Network error submitting input:', error);
@@ -514,14 +542,22 @@
         }
     }
 
-
-    // Event listener for the main execute form (Update result clearing)
+    // --- Event listener for the main execute form (MODIFIED) ---
     executeForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (currentTaskId) {
-            alert("A task is already running.");
-            return;
+            // Check if it's really running or just loaded in waiting state
+            const taskInfo = taskStatusMessage.textContent; // Use status message as proxy
+            if (taskInfo && !taskInfo.includes('Complete') && !taskInfo.includes('Failed') && !taskInfo.includes('Idle') ) {
+                 alert("A task is already active. Please complete or cancel it first.");
+                 return;
+            }
+            // If it was just showing a completed/failed state, allow starting new task
+            console.log("Previous task was finished, allowing new task submission.");
+            stopPollingAndReset(); // Clean up just in case
         }
+
+        // ... (rest of form validation remains the same) ...
         const prompt = document.getElementById('prompt').value;
         const maxRetries = document.getElementById('max_retries').value;
         if (!prompt.trim()) {
@@ -531,12 +567,10 @@
 
         executeButton.disabled = true;
         executeSpinner.style.display = 'inline-block';
-        // --- Clear previous results ---
         overallStatusBanner.style.display = 'none';
         resultsMainBox.style.display = 'none';
-        resultsDetailsContainer.innerHTML = ''; // Clear details
-        if(resultsPlaceholder) resultsPlaceholder.style.display = 'block'; // Show placeholder
-        // --- ---
+        resultsDetailsContainer.innerHTML = '';
+        if(resultsPlaceholder) resultsPlaceholder.style.display = 'block';
         taskStatusMessage.textContent = 'Starting...';
 
         try {
@@ -548,45 +582,89 @@
             const data = await response.json();
             if (!response.ok) {
                 console.error('Error starting task:', data);
-                 overallStatusBanner.textContent = `Error starting task: ${data.message || response.status}`;
-                 overallStatusBanner.className = 'alert alert-danger';
-                 overallStatusBanner.style.display = 'block';
-                 if(resultsPlaceholder) resultsPlaceholder.style.display = 'none'; // Hide placeholder on error
-                 resultsMainBox.style.display = 'none';
-                stopPollingAndReset();
+                overallStatusBanner.textContent = `Error starting task: ${data.message || response.status}`;
+                overallStatusBanner.className = 'alert alert-danger';
+                overallStatusBanner.style.display = 'block';
+                if(resultsPlaceholder) resultsPlaceholder.style.display = 'none';
+                resultsMainBox.style.display = 'none';
+                stopPollingAndReset(); // Reset UI fully on start error
             } else {
-                currentTaskId = data.task_id;
-                // Show placeholder initially
-                resultsDetailsContainer.innerHTML = ''; // Clear just in case
+                currentTaskId = data.task_id; // Set the new task ID
+                resultsDetailsContainer.innerHTML = '';
                 if(resultsPlaceholder) resultsPlaceholder.style.display = 'block';
                 resultsPlaceholder.textContent = `Task started with ID: ${currentTaskId}. Polling for status...`;
-                resultsMainBox.style.display = 'block'; // Show the box containing the placeholder
+                resultsMainBox.style.display = 'block';
+                taskStatusMessage.textContent = `Status: ${data.status}`; // Show initial status
 
-                taskStatusMessage.textContent = `Status: ${data.status}`;
-                if (pollIntervalId) clearInterval(pollIntervalId);
-                pollIntervalId = setInterval(checkTaskStatus, pollIntervalMs);
-                checkTaskStatus();
+                if (pollIntervalId) clearInterval(pollIntervalId); // Clear any old interval
+                pollIntervalId = setInterval(checkTaskStatus, pollIntervalMs); // Start polling
+                // Don't call checkTaskStatus() immediately, let the interval handle it
             }
         } catch (error) {
+            // ... (network error handling remains the same) ...
             console.error('Network error starting task:', error);
             overallStatusBanner.textContent = 'Network error starting task.';
             overallStatusBanner.className = 'alert alert-danger';
             overallStatusBanner.style.display = 'block';
             if(resultsPlaceholder) resultsPlaceholder.style.display = 'none';
              resultsMainBox.style.display = 'none';
-            stopPollingAndReset();
+            stopPollingAndReset(); // Reset UI fully on start error
         }
     });
 
     // Event listeners for modal buttons (Keep As Is)
-    // ... modal listeners ...
     modalSubmitButton.addEventListener('click', () => submitInput(modalInput.value));
     modalInput.addEventListener('keypress', (event) => { if (event.key === 'Enter') { event.preventDefault(); submitInput(modalInput.value); } });
-    modalSubmitPasswordButton.addEventListener('click', () => { submitInput(modalPasswordInput.value); modalPasswordInput.value = ''; });
-    modalPasswordInput.addEventListener('keypress', (event) => { if (event.key === 'Enter') { event.preventDefault(); submitInput(modalPasswordInput.value); modalPasswordInput.value = ''; } });
+    modalSubmitPasswordButton.addEventListener('click', () => { submitInput(modalPasswordInput.value); }); // Don't clear here, submitInput handles it
+    modalPasswordInput.addEventListener('keypress', (event) => { if (event.key === 'Enter') { event.preventDefault(); submitInput(modalPasswordInput.value); } });
     modalConfirmYesButton.addEventListener('click', () => submitInput('yes'));
     modalConfirmNoButton.addEventListener('click', () => submitInput('no'));
 
+    // --- NEW: Initial Page Load Logic ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // Read initial state passed from Flask template
+        const initialTaskId = {{ initial_task_id|tojson|safe }};
+        const initialPromptNeeded = {{ initial_prompt_needed|tojson|safe }};
+        const initialPromptText = {{ initial_prompt_text|tojson|safe }};
+        const initialInputType = {{ initial_input_type|tojson|safe }};
+        const initialTaskStatus = {{ initial_task_status|tojson|safe }}; // Get status passed from backend
+
+        console.log("Page loaded. Initial Task State:", { initialTaskId, initialPromptNeeded, initialInputType, initialTaskStatus });
+
+        if (initialTaskId && !initialPromptNeeded) {
+            // A task is active but NOT waiting for input (e.g., running)
+            currentTaskId = initialTaskId; // Set the ID so polling can track it
+            executeButton.disabled = true; // Disable form submission
+            taskStatusMessage.textContent = `Status: ${initialTaskStatus}`; // Show current known status
+             if(resultsPlaceholder) {
+                 resultsPlaceholder.textContent = `Task ${currentTaskId} is active (${initialTaskStatus}). Polling for updates...`;
+                 resultsPlaceholder.style.display = 'block';
+                 resultsMainBox.style.display = 'block'; // Show box containing placeholder
+             }
+            // Start polling to get subsequent updates or final result
+            if (pollIntervalId) clearInterval(pollIntervalId);
+            pollIntervalId = setInterval(checkTaskStatus, pollIntervalMs);
+            checkTaskStatus(); // Poll immediately
+        } else if (initialTaskId && initialPromptNeeded) {
+            // A task IS active AND waiting for input
+            console.log("Initial state requires input. Showing modal.");
+            // Call the function to configure and show the modal immediately
+            showInputModal(initialTaskId, initialPromptText, initialInputType, initialTaskStatus);
+            // Start polling as well, in case the state changes or times out
+            if (pollIntervalId) clearInterval(pollIntervalId);
+            pollIntervalId = setInterval(checkTaskStatus, pollIntervalMs);
+            // No need for immediate poll here, modal is already shown
+        } else {
+             // No active task, or previous task finished. UI is in default state.
+             taskStatusMessage.textContent = `Status: ${initialTaskStatus}`; // Should be "Idle" if no task
+             if(resultsPlaceholder) {
+                 resultsPlaceholder.textContent = 'Task results will appear here...';
+                 resultsPlaceholder.style.display = 'block'; // Ensure placeholder is visible initially
+                  // Don't show the main box until there are results or a running task
+                 resultsMainBox.style.display = 'none';
+             }
+        }
+    });
 
 </script>
 {% endblock %}

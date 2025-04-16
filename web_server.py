@@ -191,10 +191,55 @@ def logout():
 @app.route('/')
 @login_required
 def index():
-    app.logger.info(f"Serving default view (LLM Executor Tab) to user: {current_user.id}")
-    # Make sure to pass the username for potential display in base.html
-    return render_template('llm_executor.html', username=current_user.id, title="LLM Task Executor", active_tab="llm")
+    user_id = current_user.id
+    app.logger.info(f"Serving default view (LLM Executor Tab) to user: {user_id}")
 
+    # --- Check for initial task state requiring input ---
+    initial_task_id = None
+    initial_prompt_needed = False
+    initial_prompt_text = None
+    initial_input_type = None
+    initial_task_status = "Idle" # Default status
+
+    with TASK_LOCK:
+        # Find the most recently started, non-final task for this user
+        user_tasks = [
+            (task_id, info) for task_id, info in ACTIVE_TASKS.items()
+            if info.get("user_id") == user_id and info.get("status") not in ["complete", "failed"]
+        ]
+
+        if user_tasks:
+            user_tasks.sort(key=lambda item: item[1].get("start_time", datetime.min), reverse=True)
+            latest_task_id, latest_task_info = user_tasks[0]
+
+            # Check if this latest task is awaiting user action
+            if latest_task_info.get("prompt_needed") and latest_task_info["status"] in ["awaiting_input", "awaiting_confirmation"]:
+                initial_task_id = latest_task_id
+                initial_prompt_needed = True
+                initial_prompt_text = latest_task_info.get("prompt_text")
+                initial_input_type = latest_task_info.get("input_type")
+                initial_task_status = latest_task_info["status"] # Pass the actual waiting status
+                app.logger.info(f"User '{user_id}' loading Executor page. Task {initial_task_id} is awaiting input (type: {initial_input_type}).")
+            elif latest_task_info: # Task exists but isn't waiting for input (e.g., running)
+                initial_task_id = latest_task_id # Still pass the ID so polling can potentially start
+                initial_task_status = latest_task_info["status"] # Pass the current running status
+                app.logger.info(f"User '{user_id}' loading Executor page. Task {initial_task_id} is active but not awaiting input (status: {initial_task_status}).")
+
+
+    # Pass initial state variables to the template
+    return render_template(
+        'llm_executor.html',
+        username=current_user.id,
+        title="LLM Task Executor",
+        active_tab="llm",
+        # --- NEW variables for initial state ---
+        initial_task_id=initial_task_id,
+        initial_prompt_needed=initial_prompt_needed,
+        initial_prompt_text=initial_prompt_text,
+        initial_input_type=initial_input_type,
+        initial_task_status=initial_task_status.replace("_", " ").capitalize()
+        # --- ---
+    )
 
 # --- Dashboard Route ---
 @app.route('/dashboard')
