@@ -1,4 +1,9 @@
 # llm-commander-master/web_server.py
+# Modifications:
+# - Update ACTIVE_TASKS structure comment
+# - Add initial_prompt and current_step to task state on creation
+# - Add /dashboard_status endpoint to poll for active task info
+
 import os
 import logging
 import socket
@@ -64,16 +69,19 @@ if not app.config['SECRET_KEY']:
 # Values are dictionaries like:
 # {
 #   "status": "started" | "running_attempt_X" | "awaiting_confirmation" | "awaiting_input" | "resuming" | "complete" | "failed",
+#   "initial_prompt": str, # The very first prompt from the user
+#   "current_step": str, # Description of what the task is currently doing (e.g., "Requesting commands", "Executing...", "Waiting for input...")
 #   "prompt_needed": bool,
-#   "prompt_text": str | None,
+#   "prompt_text": str | None, # Text for modal if prompt_needed is True
 #   "input_type": "confirmation" | "text" | "password" | None,
 #   "user_response": str | None, # Stores the input from the user briefly
-#   "result": dict | None, # Final result object
+#   "result": dict | None, # Final result object (contains 'overall_success' and 'results' list)
 #   "wait_event": threading.Event(), # Used to pause/resume the background thread
 #   "log_dir": str | None,
 #   "start_time": datetime,
-#   "pexpect_child": pexpect_child_object | None # Temporary reference, cleaned up
-#   "thread": threading.Thread object | None # Reference to the background thread
+#   "pexpect_child": pexpect_child_object | None, # Temporary reference, cleaned up
+#   "thread": threading.Thread object | None, # Reference to the background thread
+#   "user_id": str # User who initiated the task
 # }
 ACTIVE_TASKS = {}
 TASK_LOCK = threading.Lock() # To protect access to ACTIVE_TASKS
@@ -130,7 +138,8 @@ if not os.path.exists(LOGS_DIR):
 
 log_file = os.path.join(LOGS_DIR, 'web_server.log')
 try:
-    file_handler = RotatingFileHandler(log_file, maxBytes=1024*1024*5, backupCount=3, encoding='utf-8')
+    # Reduced file size for potentially more frequent dashboard polling logs
+    file_handler = RotatingFileHandler(log_file, maxBytes=1024*1024*2, backupCount=3, encoding='utf-8')
     file_handler.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s [%(pathname)s:%(lineno)d]')
     file_handler.setFormatter(formatter)
@@ -187,34 +196,73 @@ def index():
     return render_template('llm_executor.html', username=current_user.id, title="LLM Task Executor", active_tab="llm")
 
 
-# --- Optional: Route for the other tab ---
+# --- Dashboard Route ---
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # Placeholder logic...
-    current_main_task = "Example: Deploy web application"
-    current_step = "Example: Waiting for user confirmation"
+    # Data is now primarily loaded via the /dashboard_status polling endpoint
+    # We still pass static elements like graph data here if needed
 
     # --- NEW: Generate Sample Graph Data ---
-    # In a real application, this data would come from a database or analytics service
     graph_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"]
     graph_data = [150, 220, 180, 250, 300, 280, 310, 330]
 
-    app.logger.info(f"Serving Dashboard Tab to user: {current_user.id}")
+    app.logger.info(f"Serving Dashboard Tab structure to user: {current_user.id}")
     return render_template(
         'dashboard.html',
         username=current_user.id,
         title="Dashboard",
         active_tab="dashboard",
-        main_task=current_main_task, # This is still placeholder
-        current_task=current_step,  # This is still placeholder
+        # No need to pass main_task/current_task here anymore
         today_date=date.today().strftime("%Y-%m-%d"), # Add today's date for the earnings card
         # Pass graph data to the template (convert to JSON for JS)
         graph_labels=json.dumps(graph_labels),
         graph_data=json.dumps(graph_data)
     )
 
-# --- NEW: Route for Earnings Modal Content ---
+# --- NEW: Route for Dashboard Polling ---
+@app.route('/dashboard_status')
+@login_required
+def get_dashboard_status():
+    """API endpoint for the dashboard to poll for the current user's active task status."""
+    user_id = current_user.id
+    active_task_info = None
+
+    with TASK_LOCK:
+        # Find the most recently started, *non-final* task for this user
+        # Assuming one active task per user for this simple view
+        user_tasks = [
+            (task_id, info) for task_id, info in ACTIVE_TASKS.items()
+            if info.get("user_id") == user_id and info.get("status") not in ["complete", "failed"]
+        ]
+
+        if user_tasks:
+            # Sort by start time descending to get the latest one
+            user_tasks.sort(key=lambda item: item[1].get("start_time", datetime.min), reverse=True)
+            # Get the info of the latest active task
+            active_task_info = user_tasks[0][1] # item[1] is the info dict
+
+    if active_task_info:
+        app.logger.debug(f"Dashboard poll: Found active task for user '{user_id}'. Status: {active_task_info.get('status')}")
+        response_data = {
+            "active": True,
+            "main_task": active_task_info.get("initial_prompt", "N/A"),
+            "current_step": active_task_info.get("current_step", "N/A"),
+            "status": active_task_info.get("status", "unknown").replace("_", " ").capitalize()
+        }
+    else:
+        app.logger.debug(f"Dashboard poll: No active task found for user '{user_id}'.")
+        response_data = {
+            "active": False,
+            "main_task": "No active task.",
+            "current_step": "Idle.",
+            "status": "idle"
+        }
+
+    return jsonify(response_data)
+
+
+# --- Route for Earnings Modal Content ---
 @app.route('/get_earnings_info')
 @login_required
 def get_earnings_info():
@@ -280,6 +328,8 @@ def handle_execute():
     with TASK_LOCK:
         ACTIVE_TASKS[task_id] = {
             "status": "started",
+            "initial_prompt": initial_prompt, # <-- Store initial prompt
+            "current_step": "Task submitted...", # <-- Initial step description
             "prompt_needed": False,
             "prompt_text": None,
             "input_type": None,
@@ -297,14 +347,12 @@ def handle_execute():
 
     try:
         # --- Start the background task ---
-        # Pass the ACTIVE_TASKS dictionary (or a wrapper/manager if more complex state needed)
+        # Pass the ACTIVE_TASKS dictionary
         thread = threading.Thread(
             target=llm_commander_app.process_task_background,
             args=(initial_prompt, max_retries, task_id, ACTIVE_TASKS),
             daemon=True # Daemon threads exit when the main program exits
         )
-        # Alternatively, using the ThreadPoolExecutor:
-        # future = executor.submit(llm_commander_app.process_task_background, initial_prompt, max_retries, task_id, ACTIVE_TASKS)
         # Store the thread reference
         with TASK_LOCK:
              ACTIVE_TASKS[task_id]["thread"] = thread
@@ -328,25 +376,23 @@ def handle_execute():
 @app.route('/task_status/<task_id>', methods=['GET'])
 @login_required
 def get_task_status(task_id):
-    """Provides the current status and results (if available) of a task."""
+    """Provides the current status and results (if available) of a task for the Executor tab."""
     user_id = current_user.id
-    app.logger.debug(f"User '{user_id}' requesting status for task: {task_id}")
+    app.logger.debug(f"Executor status request from '{user_id}' for task: {task_id}")
 
     with TASK_LOCK:
         task_info = ACTIVE_TASKS.get(task_id)
 
     if not task_info:
-        app.logger.warning(f"Status requested for unknown task ID: {task_id}")
+        app.logger.warning(f"Executor status requested for unknown task ID: {task_id}")
         return jsonify({"error": "Not Found", "message": "Task ID not found."}), 404
 
     # --- Security Check: Ensure user owns the task ---
-    # Simple check, could be enhanced based on roles/permissions if needed
     if task_info.get("user_id") != user_id:
         app.logger.warning(f"User '{user_id}' attempted to access task {task_id} owned by '{task_info.get('user_id')}'.")
         return jsonify({"error": "Forbidden", "message": "You do not have permission to view this task."}), 403
 
-
-    # Selectively return fields relevant to the frontend
+    # Selectively return fields relevant to the frontend (Executor Tab)
     status_response = {
         "task_id": task_id,
         "status": task_info["status"].replace("_", " ").capitalize(),
@@ -356,27 +402,20 @@ def get_task_status(task_id):
         "result": task_info.get("result") # Send the final result if status is complete/failed
     }
 
-    # Optional: Clean up completed/failed tasks after a delay?
-    # if task_info["status"] in ["complete", "failed"]:
-    #     # Consider removing from ACTIVE_TASKS after a grace period
-    #     pass
-
-    app.logger.debug(f"Task {task_id} status for user '{user_id}': {status_response['status']}")
+    app.logger.debug(f"Task {task_id} executor status for user '{user_id}': {status_response['status']}")
     return jsonify(status_response), 200
 
 @app.route('/task_history_data')
 @login_required
 def get_task_history_data():
-    """API endpoint to fetch task history data."""
+    """API endpoint to fetch task history data for the user."""
     user_id = current_user.id
     app.logger.info(f"User '{user_id}' requested task history data.")
 
     history_data = []
-    # --- Robust history loading (copied from original /dashboard) ---
+    # --- Robust history loading ---
     if os.path.exists(LOGS_TASKS):
         try:
-            # List items and sort by name (which includes timestamp) descending initially
-            # This gives newest folders first, reducing need for potentially slow datetime parsing on every file
             items = sorted(os.listdir(LOGS_TASKS), reverse=True)
 
             for item_name in items:
@@ -390,15 +429,15 @@ def get_task_history_data():
 
                         log_data = extract_log_data(item_name)
                         if log_data:
-                            # Convert datetime to ISO string for JSON compatibility
-                            if log_data.get('timestamp'):
+                             # TODO: Future - Filter history by user_id if logs contained user info
+                             # For now, showing all history accessible to the logged-in user.
+                             if log_data.get('timestamp'):
                                 log_data['timestamp_iso'] = log_data['timestamp'].isoformat()
-                            history_data.append(log_data)
+                             history_data.append(log_data)
                         else:
                             app.logger.warning(f"Could not extract data for task folder: {item_name}")
                     except Exception as e:
                         app.logger.error(f"Error processing task log folder '{item_name}': {e}", exc_info=True)
-                        # Append minimal error data if needed
                         history_data.append({
                             'id': item_name,
                             'status': 'Error Loading Log',
@@ -415,13 +454,10 @@ def get_task_history_data():
         app.logger.info(f"Task logs directory '{LOGS_TASKS}' not found. Returning empty history.")
         return jsonify([]) # Return empty list if directory doesn't exist
 
-    # Sorting is already roughly done by directory name, but we can re-sort by ISO timestamp just to be sure
+    # Re-sort by ISO timestamp just to be sure
     history_data.sort(key=lambda x: x.get('timestamp_iso', '0000-00-00T00:00:00'), reverse=True)
 
     app.logger.info(f"Returning {len(history_data)} task history items for user '{user_id}'.")
-    # Use standard json.dumps with the custom serializer if needed, or manual conversion as done above
-    # return jsonify(history_data)
-    # Or, if manual conversion handles all non-serializables:
     return jsonify(history_data)
 
 @app.route('/task_output/<task_id>', methods=['GET'])
@@ -429,33 +465,32 @@ def get_task_history_data():
 def get_task_output(task_id):
     """Serves the content of a task's output.log file."""
     user_id = current_user.id
-    # Use abort for cleaner error handling within Flask routes
-    # from flask import abort
-
     app.logger.info(f"User '{user_id}' requested output log for task: {task_id}")
 
     # --- Security Validation ---
     if not task_id or not TASK_ID_PATTERN.match(task_id):
         app.logger.warning(f"Invalid task ID format requested by user '{user_id}': {task_id}")
-        abort(400, description="Invalid Task ID format.") # Use abort
+        abort(400, description="Invalid Task ID format.")
 
     # --- Construct Path ---
     try:
         log_dir = os.path.join(LOGS_TASKS, task_id)
         output_log_file = os.path.join(log_dir, 'output.log')
-        # More robust check (optional, relies on LOGS_TASKS being absolute)
-        # abs_output_log_file = os.path.abspath(output_log_file)
-        # abs_logs_tasks_dir = os.path.abspath(LOGS_TASKS)
-        # if not abs_output_log_file.startswith(abs_logs_tasks_dir):
-        #     app.logger.error(f"Path Traversal Attempt? User '{user_id}', Task ID '{task_id}', Computed Path '{output_log_file}'")
-        #     abort(404)
+        # Basic check to prevent trivial path traversal
+        if not os.path.abspath(output_log_file).startswith(os.path.abspath(LOGS_TASKS)):
+             app.logger.error(f"Potential Path Traversal Attempt? User '{user_id}', Task ID '{task_id}'")
+             abort(404, description="Task log not found.") # Be vague on purpose
 
     except Exception as path_e:
         app.logger.error(f"Error constructing path for task '{task_id}': {path_e}", exc_info=True)
         abort(500, description="Internal error creating log path.")
 
     # --- Check File Existence and Read ---
-    if not os.path.isfile(output_log_file): # Check if it's a file directly
+    # TODO: Future - Check if user_id has permission to view this specific task log
+    # This might involve storing user_id *in* the log or associating task_id with user_id at creation time
+    # For now, any authenticated user can view any valid task log
+
+    if not os.path.isfile(output_log_file):
         app.logger.warning(f"Output log file not found or not a file for task '{task_id}'. Path: {output_log_file}")
         abort(404, description="Output log file not found.")
 
@@ -511,16 +546,18 @@ def provide_task_input(task_id):
         # Store the response and signal the waiting thread
         task_info["user_response"] = user_input
         task_info["status"] = "resuming" # Update status
+        task_info["current_step"] = "Received user input, resuming task..." # Update step
         wait_event = task_info.get("wait_event")
 
         if wait_event:
-            app.logger.info(f"Received input for task {task_id}: '{user_input[:20]}...'. Signaling thread.")
+            app.logger.info(f"Received input for task {task_id}: '{str(user_input)[:20]}...'. Signaling thread.")
             wait_event.set() # Resume the background thread
             return jsonify({"status": "input_received", "message": "Input received, task resuming."}), 200
         else:
             # Should not happen if state is managed correctly
             app.logger.error(f"Task {task_id} was awaiting input but had no wait_event!")
             task_info["status"] = "failed" # Mark as failed
+            task_info["current_step"] = "Internal state error (missing wait event)." # Update step
             task_info["result"] = {"error": "Internal state error (missing wait event)."}
             return jsonify({"error": "Internal Server Error", "message": "Internal state error processing input."}), 500
 
@@ -543,13 +580,14 @@ def get_local_ip_hostname():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.settimeout(0.1)
         try:
-            s.connect(('8.8.8.8', 1))
+            # Doesn't actually send packets
+            s.connect(('10.255.255.255', 1))
             ip_address = s.getsockname()[0]
         except OSError:
-            ip_address = '127.0.0.1'
+            ip_address = '127.0.0.1' # Fallback if no network route
         return ip_address
   except Exception:
-    return "127.0.0.1"
+    return "127.0.0.1" # Broader fallback
 
 # --- Main Execution ---
 if __name__ == '__main__':
@@ -582,11 +620,14 @@ if __name__ == '__main__':
     try:
         from waitress import serve
         print("Running with Waitress WSGI server.")
-        # Explicitly set threads=1 if using the in-memory state management
-        # For development/testing, Waitress default might be okay, but be aware.
-        serve(app, host=host_ip, port=port, threads=4) # Default threads is 4, BE CAREFUL with state
+        # Explicitly set threads if concerned about shared state with >1 thread processing requests
+        # If state management becomes complex, stick to 1 thread or use proper inter-thread communication.
+        # For simple dictionary access with locks, multiple threads *might* be okay, but increases complexity.
+        # Let's keep the default (4 threads) for now but be mindful.
+        serve(app, host=host_ip, port=port) # Using default Waitress threads
     except ImportError:
         print("Waitress not found, falling back to Flask development server.")
         print("WARNING: Flask's development server is NOT suitable for production.")
         # Run Flask dev server (single-threaded by default unless specified)
-        app.run(host=host_ip, port=port, debug=False, threaded=True) # threaded=True is needed for background tasks
+        # Set threaded=True to handle multiple requests concurrently (like background polling)
+        app.run(host=host_ip, port=port, debug=False, threaded=True)
