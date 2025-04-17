@@ -1,8 +1,5 @@
-# llm-commander-master/web_server.py
-# Modifications:
-# - Update ACTIVE_TASKS structure comment
-# - Add initial_prompt and current_step to task state on creation
-# - Add /dashboard_status endpoint to poll for active task info
+# llm-commander/web_server.py
+# Update ACTIVE_TASKS comment and potentially status reporting
 
 import os
 import logging
@@ -68,14 +65,14 @@ if not app.config['SECRET_KEY']:
 # Keys are task_ids (UUIDs).
 # Values are dictionaries like:
 # {
-#   "status": "started" | "running_attempt_X" | "awaiting_confirmation" | "awaiting_input" | "resuming" | "complete" | "failed",
+#   "status": "started" | "planning" | "executing_step_X" | "awaiting_confirmation" | "awaiting_input" | "resuming" | "complete" | "failed",
 #   "initial_prompt": str, # The very first prompt from the user
-#   "current_step": str, # Description of what the task is currently doing (e.g., "Requesting commands", "Executing...", "Waiting for input...")
+#   "current_step": str, # Description of what the task is currently doing (e.g., "Generating plan...", "Executing step 1/N: ...", "Waiting for input...", "Task finished.")
 #   "prompt_needed": bool,
 #   "prompt_text": str | None, # Text for modal if prompt_needed is True
 #   "input_type": "confirmation" | "text" | "password" | None,
 #   "user_response": str | None, # Stores the input from the user briefly
-#   "result": dict | None, # Final result object (contains 'overall_success' and 'results' list)
+#   "result": dict | None, # Final result object (contains 'overall_success', 'plan', 'steps_results' list, potentially 'error')
 #   "wait_event": threading.Event(), # Used to pause/resume the background thread
 #   "log_dir": str | None,
 #   "start_time": datetime,
@@ -200,6 +197,7 @@ def index():
     initial_prompt_text = None
     initial_input_type = None
     initial_task_status = "Idle" # Default status
+    initial_current_step = "Ready for new task." # Default step
 
     with TASK_LOCK:
         # Find the most recently started, non-final task for this user
@@ -219,11 +217,13 @@ def index():
                 initial_prompt_text = latest_task_info.get("prompt_text")
                 initial_input_type = latest_task_info.get("input_type")
                 initial_task_status = latest_task_info["status"] # Pass the actual waiting status
-                app.logger.info(f"User '{user_id}' loading Executor page. Task {initial_task_id} is awaiting input (type: {initial_input_type}).")
+                initial_current_step = latest_task_info.get("current_step", "Waiting for user...") # Pass current step desc
+                app.logger.info(f"User '{user_id}' loading Executor page. Task {initial_task_id} is awaiting input (type: {initial_input_type}). Step: {initial_current_step}")
             elif latest_task_info: # Task exists but isn't waiting for input (e.g., running)
                 initial_task_id = latest_task_id # Still pass the ID so polling can potentially start
                 initial_task_status = latest_task_info["status"] # Pass the current running status
-                app.logger.info(f"User '{user_id}' loading Executor page. Task {initial_task_id} is active but not awaiting input (status: {initial_task_status}).")
+                initial_current_step = latest_task_info.get("current_step", "Processing...") # Pass current step desc
+                app.logger.info(f"User '{user_id}' loading Executor page. Task {initial_task_id} is active (status: {initial_task_status}, step: {initial_current_step}).")
 
 
     # Pass initial state variables to the template
@@ -237,7 +237,8 @@ def index():
         initial_prompt_needed=initial_prompt_needed,
         initial_prompt_text=initial_prompt_text,
         initial_input_type=initial_input_type,
-        initial_task_status=initial_task_status.replace("_", " ").capitalize()
+        initial_task_status=initial_task_status.replace("_", " ").capitalize(),
+        initial_current_step=initial_current_step # Pass the current step description
         # --- ---
     )
 
@@ -288,7 +289,7 @@ def get_dashboard_status():
             active_task_info = user_tasks[0][1] # item[1] is the info dict
 
     if active_task_info:
-        app.logger.debug(f"Dashboard poll: Found active task for user '{user_id}'. Status: {active_task_info.get('status')}")
+        app.logger.debug(f"Dashboard poll: Found active task for user '{user_id}'. Status: {active_task_info.get('status')}, Step: {active_task_info.get('current_step')}")
         response_data = {
             "active": True,
             "main_task": active_task_info.get("initial_prompt", "N/A"),
@@ -352,9 +353,11 @@ def handle_execute():
         return jsonify({"error": "Bad Request", "message": "Request body cannot be empty"}), 400
 
     initial_prompt = data.get('prompt')
-    max_retries_str = data.get('max_retries', '3')
+    # Max retries is less relevant now, but keep it for potential future step retries
+    max_retries_str = data.get('max_retries', '0') # Default to 0 as plan fails on first step error
 
     try:
+        # Keep the parsing logic but might not use the value extensively
         max_retries = int(max_retries_str)
         if not (0 <= max_retries <= 10):
              raise ValueError("max_retries must be between 0 and 10")
@@ -372,9 +375,9 @@ def handle_execute():
     # Store initial task state
     with TASK_LOCK:
         ACTIVE_TASKS[task_id] = {
-            "status": "started",
-            "initial_prompt": initial_prompt, # <-- Store initial prompt
-            "current_step": "Task submitted...", # <-- Initial step description
+            "status": "started", # Will quickly change to 'planning' in background
+            "initial_prompt": initial_prompt, # Store initial prompt
+            "current_step": "Task submitted, preparing plan...", # Initial step description
             "prompt_needed": False,
             "prompt_text": None,
             "input_type": None,
@@ -388,13 +391,14 @@ def handle_execute():
             "user_id": user_id # Associate task with user
         }
 
-    app.logger.info(f"User '{user_id}' starting task {task_id} for prompt (len={len(initial_prompt)}, retries={max_retries}): {initial_prompt[:100]}...")
+    app.logger.info(f"User '{user_id}' starting task {task_id} for prompt (len={len(initial_prompt)}): {initial_prompt[:100]}...")
 
     try:
         # --- Start the background task ---
         # Pass the ACTIVE_TASKS dictionary
         thread = threading.Thread(
             target=llm_commander_app.process_task_background,
+            # Pass max_retries, though its usage within the function changed
             args=(initial_prompt, max_retries, task_id, ACTIVE_TASKS),
             daemon=True # Daemon threads exit when the main program exits
         )
@@ -441,13 +445,14 @@ def get_task_status(task_id):
     status_response = {
         "task_id": task_id,
         "status": task_info["status"].replace("_", " ").capitalize(),
+        "current_step": task_info.get("current_step", ""), # Add current step description
         "prompt_needed": task_info.get("prompt_needed", False),
         "prompt_text": task_info.get("prompt_text") if task_info.get("prompt_needed") else None,
         "input_type": task_info.get("input_type") if task_info.get("prompt_needed") else None,
         "result": task_info.get("result") # Send the final result if status is complete/failed
     }
 
-    app.logger.debug(f"Task {task_id} executor status for user '{user_id}': {status_response['status']}")
+    app.logger.debug(f"Task {task_id} executor status for user '{user_id}': Status='{status_response['status']}', Step='{status_response['current_step']}'")
     return jsonify(status_response), 200
 
 @app.route('/task_history_data')
@@ -461,49 +466,66 @@ def get_task_history_data():
     # --- Robust history loading ---
     if os.path.exists(LOGS_TASKS):
         try:
-            items = sorted(os.listdir(LOGS_TASKS), reverse=True)
+            # Sort folders by name (which starts with timestamp) descending
+            items = sorted(
+                [d for d in os.listdir(LOGS_TASKS) if os.path.isdir(os.path.join(LOGS_TASKS, d))],
+                reverse=True
+            )
 
             for item_name in items:
                 item_path = os.path.join(LOGS_TASKS, item_name)
-                if os.path.isdir(item_path):
-                    try:
-                        # Validate folder name format before processing
-                        if not TASK_ID_PATTERN.match(item_name):
-                             app.logger.warning(f"Skipping non-task folder: {item_name}")
-                             continue
+                # No need for isdir check again here
+                try:
+                    # Validate folder name format before processing
+                    if not TASK_ID_PATTERN.match(item_name):
+                         app.logger.warning(f"Skipping non-task folder: {item_name}")
+                         continue
 
-                        log_data = extract_log_data(item_name)
-                        if log_data:
-                             # TODO: Future - Filter history by user_id if logs contained user info
-                             # For now, showing all history accessible to the logged-in user.
-                             if log_data.get('timestamp'):
-                                log_data['timestamp_iso'] = log_data['timestamp'].isoformat()
-                             history_data.append(log_data)
-                        else:
-                            app.logger.warning(f"Could not extract data for task folder: {item_name}")
-                    except Exception as e:
-                        app.logger.error(f"Error processing task log folder '{item_name}': {e}", exc_info=True)
+                    log_data = extract_log_data(item_name) # log_data_extractor might need updates to show plan etc.
+                    if log_data:
+                         # TODO: Future - Filter history by user_id if logs contained user info
+                         # For now, showing all history accessible to the logged-in user.
+                         if log_data.get('timestamp'):
+                            log_data['timestamp_iso'] = log_data['timestamp'].isoformat()
+                         history_data.append(log_data)
+                    else:
+                        app.logger.warning(f"Could not extract data for task folder: {item_name}")
+                        # Append basic info even if extraction failed partially
                         history_data.append({
                             'id': item_name,
-                            'status': 'Error Loading Log',
-                            'prompt': 'Error processing log',
-                            'commands': [],
-                            'timestamp': None,
-                            'timestamp_iso': None,
-                            'error': True # Flag this entry
+                            'status': 'Log Extraction Error',
+                            'prompt': 'N/A',
+                            'commands': [], # Adjust if plan/steps are extracted
+                            'timestamp': extract_log_data.create_timestamp_from_string(item_name), # Try getting timestamp from name
+                            'timestamp_iso': extract_log_data.create_timestamp_from_string(item_name).isoformat() if extract_log_data.create_timestamp_from_string(item_name) else None,
+                            'error': True
                         })
+                except Exception as e:
+                    app.logger.error(f"Error processing task log folder '{item_name}': {e}", exc_info=True)
+                    # Append basic info on error
+                    timestamp_obj = extract_log_data.create_timestamp_from_string(item_name)
+                    history_data.append({
+                        'id': item_name,
+                        'status': 'Error Loading Log',
+                        'prompt': 'Error processing log',
+                        'commands': [],
+                        'timestamp': timestamp_obj,
+                        'timestamp_iso': timestamp_obj.isoformat() if timestamp_obj else None,
+                        'error': True # Flag this entry
+                    })
         except OSError as e:
             app.logger.error(f"Error listing task log directory '{LOGS_TASKS}': {e}", exc_info=True)
             return jsonify({"error": f"Error reading task history directory: {e}"}), 500
     else:
         app.logger.info(f"Task logs directory '{LOGS_TASKS}' not found. Returning empty history.")
-        return jsonify([]) # Return empty list if directory doesn't exist
+        # No need for jsonify([]) here, just let it proceed
 
-    # Re-sort by ISO timestamp just to be sure
-    history_data.sort(key=lambda x: x.get('timestamp_iso', '0000-00-00T00:00:00'), reverse=True)
+    # Re-sort just in case timestamps were inconsistent (unlikely with folder name sorting)
+    # history_data.sort(key=lambda x: x.get('timestamp_iso', '0000-00-00T00:00:00'), reverse=True)
 
     app.logger.info(f"Returning {len(history_data)} task history items for user '{user_id}'.")
     return jsonify(history_data)
+
 
 @app.route('/task_output/<task_id>', methods=['GET'])
 @login_required
@@ -519,6 +541,9 @@ def get_task_output(task_id):
 
     # --- Construct Path ---
     try:
+        # Folder name is now prefixed with timestamp
+        # Need to find the correct folder based on the UUID part of task_id if it's just UUID
+        # Assuming task_id passed IS the full folder name YYYYMMDD_HHMMSS_uuid
         log_dir = os.path.join(LOGS_TASKS, task_id)
         output_log_file = os.path.join(log_dir, 'output.log')
         # Basic check to prevent trivial path traversal
@@ -556,7 +581,7 @@ def get_task_output(task_id):
 @app.route('/provide_input/<task_id>', methods=['POST'])
 @login_required
 def provide_task_input(task_id):
-    """Receives user input for a task awaiting input."""
+    """Receives user input for a task awaiting input (confirmation or interactive)."""
     user_id = current_user.id
     app.logger.info(f"Received '/provide_input' POST for task {task_id} from user '{user_id}'")
 
@@ -565,9 +590,10 @@ def provide_task_input(task_id):
         return jsonify({"error": "Bad Request", "message": "Request must be JSON"}), 400
 
     data = request.get_json()
-    user_input = data.get('user_input')
+    user_input = data.get('user_input') # For text/password/confirmation ('yes'/'no')
 
-    if user_input is None: # Allow empty string, but not missing key
+    # Allow empty string for text input, but check None explicitly
+    if user_input is None:
         app.logger.error(f"Bad Request (provide_input {task_id}): 'user_input' missing.")
         return jsonify({"error": "Bad Request", "message": "'user_input' key is required."}), 400
 
@@ -575,7 +601,7 @@ def provide_task_input(task_id):
         task_info = ACTIVE_TASKS.get(task_id)
 
         if not task_info:
-            app.logger.warning(f"Input provided for unknown task ID: {task_id}")
+            app.logger.warning(f"Input provided for unknown or completed task ID: {task_id}")
             return jsonify({"error": "Not Found", "message": "Task ID not found or already completed."}), 404
 
         # --- Security Check: Ensure user owns the task ---
@@ -585,25 +611,33 @@ def provide_task_input(task_id):
 
         # Check if the task is actually waiting for input
         if not task_info.get("prompt_needed") or task_info["status"] not in ["awaiting_input", "awaiting_confirmation"]:
-            app.logger.warning(f"Input provided for task {task_id}, but it was not awaiting input (status: {task_info['status']}).")
+            app.logger.warning(f"Input provided for task {task_id}, but it was not awaiting input (status: {task_info['status']}, prompt_needed: {task_info.get('prompt_needed')}).")
+            # Return Conflict instead of just ignoring?
             return jsonify({"error": "Conflict", "message": "Task is not currently awaiting input."}), 409
 
         # Store the response and signal the waiting thread
         task_info["user_response"] = user_input
-        task_info["status"] = "resuming" # Update status
-        task_info["current_step"] = "Received user input, resuming task..." # Update step
+        # Don't change status here; let the waiting thread update it upon resuming
+        # task_info["status"] = "resuming" # Avoid this, let the background thread manage its state transitions
+        # task_info["current_step"] = "Received user input, resuming task..." # Let background thread update this
         wait_event = task_info.get("wait_event")
 
         if wait_event:
-            app.logger.info(f"Received input for task {task_id}: '{str(user_input)[:20]}...'. Signaling thread.")
+            app.logger.info(f"Received input for task {task_id}: '{str(user_input)[:50]}...'. Signaling thread.")
             wait_event.set() # Resume the background thread
-            return jsonify({"status": "input_received", "message": "Input received, task resuming."}), 200
+            # Don't immediately clear prompt_needed etc here, let the waiting thread do it after consuming the input
+            return jsonify({"status": "input_received", "message": "Input received, task processing will resume."}), 200
         else:
             # Should not happen if state is managed correctly
             app.logger.error(f"Task {task_id} was awaiting input but had no wait_event!")
             task_info["status"] = "failed" # Mark as failed
-            task_info["current_step"] = "Internal state error (missing wait event)." # Update step
+            task_info["current_step"] = "Internal state error (missing wait event)."
             task_info["result"] = {"error": "Internal state error (missing wait event)."}
+            # Clean up prompt state even on error
+            task_info["prompt_needed"] = False
+            task_info["prompt_text"] = None
+            task_info["input_type"] = None
+            task_info["user_response"] = None
             return jsonify({"error": "Internal Server Error", "message": "Internal state error processing input."}), 500
 
 
@@ -641,6 +675,7 @@ if __name__ == '__main__':
     local_ip_display = get_local_ip_hostname()
 
     print("--- Starting LLM Commander Web Server ---")
+    print("--- ARCHITECTURE: Plan -> Execute Steps ---") # Note the new architecture
     print("--- SECURITY WARNING ---")
     print("This application executes commands suggested by an LLM.")
     print("Ensure it runs ONLY in a SECURE, TRUSTED, ISOLATED environment.")
